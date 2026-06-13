@@ -41,6 +41,8 @@ export default function AdminDashboard() {
   const academicStructure = useStore(state => state.getAcademicStructure());
   const currentSession = useStore(state => state.currentSession);
   const advanceAcademicSession = useStore(state => state.advanceAcademicSession);
+  const currentSemester = useStore(state => state.currentSemester);
+  const setCurrentSemester = useStore(state => state.setCurrentSemester);
 
   const hasHydrated = useStore(state => state._hasHydrated);
   const dynamicUsers = useStore(state => state.dynamicUsers);
@@ -199,23 +201,43 @@ export default function AdminDashboard() {
                   <CardTitle className="text-lg font-semibold">Academic session</CardTitle>
                   <CardDescription className="text-sm">Provision a new session to roll the calendar forward and advance every student a level.</CardDescription>
                 </div>
-                <Badge variant="secondary" className="font-medium tabular-nums shrink-0">{currentSession}</Badge>
+                <Badge variant="secondary" className="font-medium tabular-nums shrink-0">{currentSession} &middot; {currentSemester} sem</Badge>
               </CardHeader>
-              <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm leading-relaxed text-muted-foreground max-w-prose text-pretty">
-                  Closing <span className="font-medium text-foreground">{currentSession}</span> opens <span className="font-medium text-foreground">{nextSession(currentSession)}</span> and promotes every student one level (100L &rarr; 200L &rarr; 300L &rarr; 400L &rarr; graduated). Promoted students re-register their courses for the new level.
-                </p>
-                <Button
-                  className="gap-2 shrink-0"
-                  onClick={() => {
-                    if (confirm(`Provision the ${nextSession(currentSession)} session?\n\nThis closes ${currentSession}, advances every student one level, and graduates final-year students. It cannot be undone.`)) {
-                      const res = advanceAcademicSession();
-                      alert(`Session ${res.newSession} provisioned. Students have been advanced to their new level.`);
-                    }
-                  }}
-                >
-                  <ChevronRight className="h-4 w-4" /> Provision new session
-                </Button>
+              <CardContent className="space-y-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-md border border-border bg-muted/40 p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Open registration semester</p>
+                    <p className="text-xs text-muted-foreground">Students can only register for courses in the open semester &mdash; the other is read-only.</p>
+                  </div>
+                  <div className="flex gap-1 bg-muted p-1 rounded-md w-fit shrink-0">
+                    {['1st', '2nd'].map(sem => (
+                      <button
+                        key={sem}
+                        type="button"
+                        onClick={() => setCurrentSemester(sem)}
+                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${currentSemester === sem ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                      >
+                        {sem} semester
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm leading-relaxed text-muted-foreground max-w-prose text-pretty">
+                    Provisioning a new session opens <span className="font-medium text-foreground">{nextSession(currentSession)}</span>, resets to the 1st semester, and promotes every student one level (100L &rarr; 200L &rarr; 300L &rarr; 400L &rarr; graduated).
+                  </p>
+                  <Button
+                    className="gap-2 shrink-0"
+                    onClick={() => {
+                      if (confirm(`Provision the ${nextSession(currentSession)} session?\n\nThis closes ${currentSession}, advances every student one level, and graduates final-year students. It cannot be undone.`)) {
+                        const res = advanceAcademicSession();
+                        alert(`Session ${res.newSession} provisioned. Students have been advanced to their new level.`);
+                      }
+                    }}
+                  >
+                    <ChevronRight className="h-4 w-4" /> Provision new session
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 

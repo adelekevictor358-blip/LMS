@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { nextSession, nextLevel } from '@/lib/utils';
+import { nextSession, nextLevel, semesterFromCode } from '@/lib/utils';
 
 const ACADEMIC_STRUCTURE = {
   colleges: [
@@ -64,6 +64,7 @@ export const useStore = create(
         liveSessions: [],
         scheduledSessions: [], // Future engagements
         currentSession: '2025/2026',
+        currentSemester: '1st',
         sessionHistory: [],
         auditingUser: null,
         _hasHydrated: false,
@@ -740,6 +741,7 @@ export const useStore = create(
             const promotedCount = state.dynamicUsers.filter(u => u.role === 'student' && u.level !== 'Graduated').length;
             return {
               currentSession: session,
+              currentSemester: '1st', // new session always opens in the first semester
               sessionHistory: [...(state.sessionHistory || []), { session: current, closedAt: new Date().toISOString(), promoted: promotedCount }],
               dynamicUsers: state.dynamicUsers.map(promote),
               user: state.user?.role === 'student' ? promote(state.user) : state.user,
@@ -750,6 +752,22 @@ export const useStore = create(
             };
           });
           return { newSession: session };
+        },
+
+        // Provision the open registration semester. Students can only register for
+        // courses in this semester; the other becomes read-only on the registration page.
+        setCurrentSemester: (sem) => {
+          if (sem !== '1st' && sem !== '2nd') return;
+          set((state) => {
+            if (state.currentSemester === sem) return {};
+            return {
+              currentSemester: sem,
+              notifications: [
+                { id: Date.now(), text: `Course registration for the ${sem} semester (${state.currentSession}) is now open.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+                ...state.notifications,
+              ],
+            };
+          });
         },
 
         addUser: (userData) => {
@@ -898,6 +916,10 @@ export const useStore = create(
           const course = state.courses.find(c => c.id === courseId);
           if (!course || (course.level && user.level && course.level !== user.level)) return;
 
+          // ...and only for the open registration semester.
+          const courseSemester = course.semester || semesterFromCode(course.code);
+          if (courseSemester && state.currentSemester && courseSemester !== state.currentSemester) return;
+
           // Materialize the implicit program+level registration the first time the
           // student curates it, so add/drop stays coherent with what they see.
           const baseIds = state.getStudentCourseIds(user);
@@ -1045,6 +1067,7 @@ export const useStore = create(
         excludedIds: state.excludedIds,
         courses: state.courses,
         currentSession: state.currentSession,
+        currentSemester: state.currentSemester,
         sessionHistory: state.sessionHistory,
         liveSessions: state.liveSessions,
         scheduledSessions: state.scheduledSessions,

@@ -13,9 +13,9 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export default function StudentCourses() {
-  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, currentSession } = useStore();
+  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, currentSession, currentSemester } = useStore();
   const [view, setView] = useState('portfolio');
-  const [semesterFilter, setSemesterFilter] = useState('1st');
+  const [semesterFilter, setSemesterFilter] = useState(currentSemester || '1st');
   const [levelFilter, setLevelFilter] = useState(user?.level || '100L');
   const allUsers = getAllUsers();
   const router = useRouter();
@@ -59,7 +59,7 @@ export default function StudentCourses() {
             Course registration
           </h1>
           <p className="text-sm leading-relaxed text-muted-foreground max-w-prose">
-            Register and manage your academic modules for the {currentSession} session.
+            Register and manage your academic modules for the {currentSession} session ({currentSemester} semester).
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -106,12 +106,12 @@ export default function StudentCourses() {
         </button>
       </nav>
 
-      {/* Read-only notice when browsing a level other than the student's own */}
-      {view === 'catalog' && levelFilter !== user?.level && (
+      {/* Read-only notice when browsing a level/semester not open for registration */}
+      {view === 'catalog' && (levelFilter !== user?.level || semesterFilter !== currentSemester) && (
         <div className="flex items-start gap-3 rounded-xl border border-border bg-muted p-4">
           <Info size={18} className="text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
-            You&apos;re viewing <span className="font-medium text-foreground">{levelFilter}</span> courses in read-only mode. You can only register for your current level (<span className="font-medium text-foreground">{user?.level}</span>).
+            You&apos;re browsing in read-only mode. Registration is open for your level (<span className="font-medium text-foreground">{user?.level}</span>) and the <span className="font-medium text-foreground">{currentSemester}</span> semester only.
           </p>
         </div>
       )}
@@ -136,6 +136,8 @@ export default function StudentCourses() {
         {visibleCourses.map(course => {
           const lecturer = getLecturer(course.lecturerId);
           const isRegistered = enrolledIds.includes(course.id);
+          const courseSem = course.semester || semesterFromCode(course.code);
+          const registrable = course.level === user?.level && courseSem === currentSemester;
 
           return (
             <Card key={course.id} className="group flex flex-col border border-border rounded-xl transition-colors hover:border-primary/40">
@@ -185,13 +187,13 @@ export default function StudentCourses() {
                          <X size={18} />
                       </Button>
                     </>
-                  ) : course.level === user?.level ? (
+                  ) : registrable ? (
                     <Button variant="outline" className="w-full" onClick={() => enrollInCourse(course.id)}>
                        <Plus size={16} /> Register course
                     </Button>
                   ) : (
-                    <Button variant="ghost" className="w-full text-muted-foreground" disabled aria-label={`${course.code} is view only — not your level`}>
-                       <Lock size={16} /> View only · {course.level}
+                    <Button variant="ghost" className="w-full text-muted-foreground" disabled aria-label={`${course.code} is view only — not open for registration`}>
+                       <Lock size={16} /> View only · {course.level !== user?.level ? course.level : `${courseSem} sem`}
                     </Button>
                   )}
                </CardFooter>
