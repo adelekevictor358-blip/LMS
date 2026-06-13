@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export default function StudentCourses() {
-  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, currentSession, currentSemester, semesterOpen } = useStore();
+  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, registrationEligibility, currentSession, currentSemester, semesterOpen } = useStore();
   const [view, setView] = useState('portfolio');
   const [semesterFilter, setSemesterFilter] = useState(currentSemester || '1st');
   const [levelFilter, setLevelFilter] = useState(user?.level || '100L');
@@ -145,8 +145,8 @@ export default function StudentCourses() {
         {visibleCourses.map(course => {
           const lecturer = getLecturer(course.lecturerId);
           const isRegistered = enrolledIds.includes(course.id);
-          const courseSem = course.semester || semesterFromCode(course.code);
-          const registrable = semesterOpen && course.level === user?.level && courseSem === currentSemester;
+          const elig = registrationEligibility(course, user);
+          const registrable = elig.ok;
 
           return (
             <Card key={course.id} className="group flex flex-col border border-border rounded-xl transition-colors hover:border-primary/40">
@@ -202,7 +202,7 @@ export default function StudentCourses() {
                     </Button>
                   ) : (
                     <Button variant="ghost" className="w-full text-muted-foreground" disabled aria-label={`${course.code} is not open for registration`}>
-                       <Lock size={16} /> {!semesterOpen ? 'Registration closed' : `View only · ${course.level !== user?.level ? course.level : `${courseSem} sem`}`}
+                       <Lock size={16} /> {elig.reason === 'closed' ? 'Registration closed' : elig.reason === 'level' ? `View only · ${elig.detail}` : elig.reason === 'semester' ? `View only · ${elig.detail} sem` : 'View only'}
                     </Button>
                   )}
                </CardFooter>

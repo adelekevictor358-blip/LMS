@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { semesterFromCode } from '@/lib/utils';
+import { semesterFromCode, nextSession } from '@/lib/utils';
 
 const ACADEMIC_STRUCTURE = {
   colleges: [
@@ -721,48 +721,21 @@ export const useStore = create(
         adminViewAs: null,
         setAdminViewAs: (role) => set({ adminViewAs: role }),
 
-        // ─── ACADEMIC SESSION ───
-        // Provision the active academic session. This only updates the synced
-        // session field that everyone follows and reopens the 1st semester for
-        // registration. It does NOT change any student's level — promotion is not
-        // automatic; student levels are managed separately by the admin.
-        setCurrentSession: (session) => {
-          const s = String(session || '').trim();
-          if (!s) return { success: false, error: 'A session value is required.' };
-          set((state) => {
-            if (s === state.currentSession) return {};
-            return {
-              currentSession: s,
-              currentSemester: '1st', // a new session starts back at the first semester
-              semesterOpen: false,    // ...and is locked until the admin opens a semester
-              sessionHistory: [...(state.sessionHistory || []), { session: state.currentSession, closedAt: new Date().toISOString() }],
-              notifications: [
-                { id: Date.now(), text: `The ${s} academic session has been created. Registration will open once the registrar opens a semester.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
-                ...state.notifications,
-              ],
-            };
-          });
-          return { success: true, session: s };
+        // ─── ACADEMIC CALENDAR ───
+        // The institution moves through (session, semester) terms with exactly one
+        // registration window open at a time. These four guided transitions are the
+        // ONLY way the calendar changes. Promotion is a SEPARATE concern
+        // (setStudentLevel / promoteStudents) and never happens here.
+        openRegistration: () => {
+          set((state) => ({
+            semesterOpen: true,
+            notifications: [
+              { id: Date.now(), text: `Course registration for the ${state.currentSemester} semester (${state.currentSession}) is now open.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+              ...state.notifications,
+            ],
+          }));
         },
-
-        // ─── REGISTRATION SEMESTER (open / close lifecycle) ───
-        // A new session is locked until the admin opens a semester. Only one
-        // semester is open at a time; closing it locks registration until the
-        // admin reopens it. Closing the 2nd semester is the cue to open a new session.
-        openSemester: (sem) => {
-          set((state) => {
-            const target = (sem === '1st' || sem === '2nd') ? sem : state.currentSemester;
-            return {
-              currentSemester: target,
-              semesterOpen: true,
-              notifications: [
-                { id: Date.now(), text: `Course registration for the ${target} semester (${state.currentSession}) is now open.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
-                ...state.notifications,
-              ],
-            };
-          });
-        },
-        closeSemester: () => {
+        closeRegistration: () => {
           set((state) => {
             if (!state.semesterOpen) return {};
             return {
@@ -774,10 +747,43 @@ export const useStore = create(
             };
           });
         },
-        // Move focus to the other semester without opening it (stays locked).
-        setSemesterFocus: (sem) => {
-          if (sem !== '1st' && sem !== '2nd') return;
-          set({ currentSemester: sem, semesterOpen: false });
+        // 1st -> 2nd semester within the same session (registration starts closed).
+        // Registration carries over within a session, so enrolments are NOT reset.
+        advanceSemester: () => {
+          const state = get();
+          if (state.currentSemester !== '1st') {
+            return { success: false, error: 'Already in the second semester — begin a new session instead.' };
+          }
+          set((s) => ({
+            currentSemester: '2nd',
+            semesterOpen: false,
+            notifications: [
+              { id: Date.now(), text: `The second semester (${s.currentSession}) has begun. Registration will open when the registrar opens it.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+              ...s.notifications,
+            ],
+          }));
+          return { success: true };
+        },
+        // Begin a new academic session: back to 1st semester, locked, and every
+        // student's registration is reset for the new year. Does NOT change levels.
+        beginNewSession: (sessionLabel) => {
+          const state = get();
+          const s = String(sessionLabel || nextSession(state.currentSession) || '').trim();
+          if (!s) return { success: false, error: 'A session value is required.' };
+          const reset = (u) => (u && u.role === 'student') ? { ...u, enrolledCourseIds: [] } : u;
+          set((st) => ({
+            currentSession: s,
+            currentSemester: '1st',
+            semesterOpen: false,
+            sessionHistory: [...(st.sessionHistory || []), { session: st.currentSession, closedAt: new Date().toISOString() }],
+            dynamicUsers: st.dynamicUsers.map(reset),
+            user: reset(st.user),
+            notifications: [
+              { id: Date.now(), text: `The ${s} academic session has begun. Registration reopens once the registrar opens the first semester.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+              ...st.notifications,
+            ],
+          }));
+          return { success: true, session: s };
         },
 
         addUser: (userData) => {
@@ -921,17 +927,9 @@ export const useStore = create(
           const { user } = state;
           if (!user || user.role !== 'student') return;
 
-          // Registration is only possible while the registrar has a semester open.
-          if (!state.semesterOpen) return;
-
-          // Students may only self-register for courses at their own level.
-          // Other levels are read-only on the registration page.
+          // One rule, shared with the registration page (registrationEligibility).
           const course = state.courses.find(c => c.id === courseId);
-          if (!course || (course.level && user.level && course.level !== user.level)) return;
-
-          // ...and only for the open registration semester.
-          const courseSemester = course.semester || semesterFromCode(course.code);
-          if (courseSemester && state.currentSemester && courseSemester !== state.currentSemester) return;
+          if (!state.registrationEligibility(course, user).ok) return;
 
           // Materialize the implicit program+level registration the first time the
           // student curates it, so add/drop stays coherent with what they see.
@@ -1002,6 +1000,26 @@ export const useStore = create(
           return state.courses.filter(c => ids.includes(c.id));
         },
 
+        // Single source of truth for "can this student register for this course".
+        // Used by enrollInCourse (the store guard) AND the registration page (UI),
+        // so the rule can never drift between them. Returns { ok, reason, detail }.
+        // reason: 'closed' | 'level' | 'semester' | 'not-student' | 'unknown' | null
+        registrationEligibility: (course, targetUser) => {
+          const state = get();
+          const u = targetUser || state.user;
+          if (!u || u.role !== 'student') return { ok: false, reason: 'not-student' };
+          if (!state.semesterOpen) return { ok: false, reason: 'closed' };
+          if (!course) return { ok: false, reason: 'unknown' };
+          if (course.level && u.level && course.level !== u.level) {
+            return { ok: false, reason: 'level', detail: course.level };
+          }
+          const courseSem = course.semester || semesterFromCode(course.code);
+          if (courseSem && state.currentSemester && courseSem !== state.currentSemester) {
+            return { ok: false, reason: 'semester', detail: courseSem };
+          }
+          return { ok: true, reason: null };
+        },
+
         // ─── ANALYTICS HELPERS ───
         getLecturerModules: (lecturerId) => {
           return get().courses.filter(c => c.lecturerId === lecturerId);
@@ -1062,9 +1080,8 @@ export const useStore = create(
           });
         },
 
-        // Deliberately set a single student's level (admin Directory editor).
-        // Promotion is never automatic; this is the only way a level changes.
-        // Changing a level resets that student's registration for the new level.
+        // Set a single student's level (admin Directory editor). Deliberate, never
+        // automatic. Changing a level resets that student's registration.
         setStudentLevel: (userId, level) => {
           const valid = ['100L', '200L', '300L', '400L', 'Graduated'];
           if (!valid.includes(level)) return;
@@ -1075,6 +1092,33 @@ export const useStore = create(
             dynamicUsers: state.dynamicUsers.map(apply),
             user: apply(state.user),
           }));
+        },
+
+        // Bulk, deliberate promotion (registrar tool). Advances active students one
+        // level; 400L students graduate. Optionally limited to opts.scope (an array
+        // of student ids). Never automatic — only run from the admin Promote tool.
+        promoteStudents: (opts = {}) => {
+          const order = ['100L', '200L', '300L', '400L'];
+          const ids = Array.isArray(opts.scope) ? new Set(opts.scope) : null;
+          const nextLvl = (lvl) => {
+            const i = order.indexOf(lvl);
+            if (i === -1) return lvl;
+            return i < order.length - 1 ? order[i + 1] : 'Graduated';
+          };
+          let promoted = 0;
+          const apply = (u) => {
+            if (!u || u.role !== 'student' || u.level === 'Graduated') return u;
+            if (ids && !ids.has(u.id)) return u;
+            const nl = nextLvl(u.level);
+            if (nl === u.level) return u;
+            promoted += 1;
+            return { ...u, level: nl, enrolledCourseIds: [], graduated: nl === 'Graduated' };
+          };
+          set((state) => ({
+            dynamicUsers: state.dynamicUsers.map(apply),
+            user: apply(state.user),
+          }));
+          return { promoted };
         },
       };
     },

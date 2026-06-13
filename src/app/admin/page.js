@@ -2,7 +2,7 @@
 // Institutional Registry Rebuild v3 - 2026-04-23
 
 import { useStore } from '@/store/useStore';
-import { semesterFromCode, nextSession } from '@/lib/utils';
+import { semesterFromCode, nextSession, nextLevel } from '@/lib/utils';
 import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useEffect, useMemo } from 'react';
@@ -41,12 +41,13 @@ export default function AdminDashboard() {
   const setStudentLevel = useStore(state => state.setStudentLevel);
   const academicStructure = useStore(state => state.getAcademicStructure());
   const currentSession = useStore(state => state.currentSession);
-  const setCurrentSession = useStore(state => state.setCurrentSession);
   const currentSemester = useStore(state => state.currentSemester);
   const semesterOpen = useStore(state => state.semesterOpen);
-  const openSemester = useStore(state => state.openSemester);
-  const closeSemester = useStore(state => state.closeSemester);
-  const setSemesterFocus = useStore(state => state.setSemesterFocus);
+  const openRegistration = useStore(state => state.openRegistration);
+  const closeRegistration = useStore(state => state.closeRegistration);
+  const advanceSemester = useStore(state => state.advanceSemester);
+  const beginNewSession = useStore(state => state.beginNewSession);
+  const promoteStudents = useStore(state => state.promoteStudents);
 
   const hasHydrated = useStore(state => state._hasHydrated);
   const dynamicUsers = useStore(state => state.dynamicUsers);
@@ -70,11 +71,13 @@ export default function AdminDashboard() {
 
   const students = useMemo(() => allUsers.filter(u => u.role === 'student'), [allUsers]);
   const faculty = useMemo(() => allUsers.filter(u => u.role === 'lecturer'), [allUsers]);
+  const promotableStudents = students.filter(s => (s.level || '100L') !== 'Graduated');
 
   const [activeTab, setActiveTab] = useState('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [sessionDraft, setSessionDraft] = useState('');
+  const [isPromoteOpen, setIsPromoteOpen] = useState(false);
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastTarget, setBroadcastTarget] = useState('all');
 
@@ -203,8 +206,8 @@ export default function AdminDashboard() {
             <Card className="rounded-xl border border-border bg-card shadow-sm">
               <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
                 <div>
-                  <CardTitle className="text-lg font-semibold">Academic session</CardTitle>
-                  <CardDescription className="text-sm">Set the active session and semester that all students follow.</CardDescription>
+                  <CardTitle className="text-lg font-semibold">Academic calendar</CardTitle>
+                  <CardDescription className="text-sm">Where the institution is in the year. Promotion is separate (Directory or Promote students).</CardDescription>
                 </div>
                 <Badge variant="secondary" className="font-medium tabular-nums shrink-0">{currentSession} &middot; {currentSemester} sem &middot; {semesterOpen ? 'Open' : 'Closed'}</Badge>
               </CardHeader>
@@ -220,55 +223,120 @@ export default function AdminDashboard() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {semesterOpen
-                        ? 'Students can register for this semester only. Close it to lock registration.'
-                        : 'Registration is locked. Students cannot register until you open a semester.'}
+                        ? 'Students can register for their level’s ' + currentSemester + '-semester courses. Close it to lock registration.'
+                        : 'Registration is locked. Open it to let students register this semester.'}
                     </p>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2 shrink-0">
-                    {semesterOpen ? (
-                      <Button variant="outline" className="h-9" onClick={() => { if (confirm(`Close ${currentSemester} semester registration? Students will not be able to register until you reopen it.`)) closeSemester(); }}>
-                        Close {currentSemester} semester
-                      </Button>
-                    ) : (
-                      <Button className="h-9 gap-2" onClick={() => openSemester(currentSemester)}>
-                        <ChevronRight className="h-4 w-4" /> Open {currentSemester} semester
-                      </Button>
-                    )}
-                    {!semesterOpen && (
-                      <Button variant="ghost" className="h-9" onClick={() => setSemesterFocus(currentSemester === '1st' ? '2nd' : '1st')}>
-                        Go to {currentSemester === '1st' ? '2nd' : '1st'} semester
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between rounded-md border border-border bg-muted/40 p-4">
-                  <div className="grid gap-1.5 flex-1">
-                    <Label className="text-xs font-medium text-muted-foreground">Academic session</Label>
-                    <p className="text-xs text-muted-foreground">Set the session everyone follows. Opening a new session reopens the 1st semester &mdash; student levels are not changed.</p>
-                    <Input
-                      value={sessionDraft}
-                      onChange={e => setSessionDraft(e.target.value)}
-                      placeholder={`e.g. ${nextSession(currentSession)}`}
-                      className="h-11 max-w-[12rem]"
-                    />
-                  </div>
                   <Button
-                    className="gap-2 shrink-0 h-11"
+                    variant={semesterOpen ? 'outline' : 'default'}
+                    className="h-9 gap-2 shrink-0"
                     onClick={() => {
-                      const target = (sessionDraft || nextSession(currentSession)).trim();
-                      if (!target || target === currentSession) { alert('Enter a different session value to open.'); return; }
-                      if (confirm(`Open the ${target} academic session for everyone?\n\nStudents will follow this session and the 1st semester opens for registration. Student levels are not changed.`)) {
-                        setCurrentSession(target);
-                        setSessionDraft('');
-                        alert(`The ${target} session is now open.`);
+                      if (semesterOpen) {
+                        if (confirm(`Close ${currentSemester} semester registration? Students cannot register until you reopen it.`)) closeRegistration();
+                      } else {
+                        openRegistration();
                       }
                     }}
                   >
-                    <ChevronRight className="h-4 w-4" /> Open session
+                    {semesterOpen ? 'Close registration' : <><ChevronRight className="h-4 w-4" /> Open registration</>}
                   </Button>
+                </div>
+                <div className="rounded-md border border-border bg-muted/40 p-4 space-y-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">Move the calendar forward</p>
+                      <p className="text-xs text-muted-foreground">
+                        {currentSemester === '1st'
+                          ? 'Advance to the second semester when the first is finished (registrations carry over within a session).'
+                          : 'The second semester is active. Begin a new session to start the next year.'}
+                      </p>
+                    </div>
+                    {currentSemester === '1st' && (
+                      <Button variant="outline" className="h-9 gap-2 shrink-0" onClick={() => {
+                        if (confirm(`Advance to the second semester of ${currentSession}? Registration stays closed until you open it.`)) {
+                          const r = advanceSemester();
+                          if (r && r.success === false) alert(r.error);
+                        }
+                      }}>
+                        <ChevronRight className="h-4 w-4" /> Advance to 2nd semester
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between border-t border-border pt-4">
+                    <div className="grid gap-1.5 flex-1">
+                      <Label className="text-xs font-medium text-muted-foreground">Begin a new session</Label>
+                      <p className="text-xs text-muted-foreground">Resets to the 1st semester and clears registrations for the new year. Student levels are not changed.</p>
+                      <Input
+                        value={sessionDraft}
+                        onChange={e => setSessionDraft(e.target.value)}
+                        placeholder={`e.g. ${nextSession(currentSession)}`}
+                        className="h-11 max-w-[12rem]"
+                      />
+                    </div>
+                    <Button className="gap-2 shrink-0 h-11" onClick={() => {
+                      const target = (sessionDraft || nextSession(currentSession)).trim();
+                      if (!target || target === currentSession) { alert('Enter a different session to begin.'); return; }
+                      if (confirm(`Begin the ${target} academic session?\n\nThis resets to the 1st semester (locked) and clears every student's registration for the new year. Student levels are NOT changed.`)) {
+                        const r = beginNewSession(target);
+                        if (r && r.success) { setSessionDraft(''); alert(`The ${target} session has begun.`); }
+                      }
+                    }}>
+                      <ChevronRight className="h-4 w-4" /> Begin new session
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
+
+            <Card className="rounded-xl border border-border bg-card shadow-sm">
+              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                <div>
+                  <CardTitle className="text-lg font-semibold">Student progression</CardTitle>
+                  <CardDescription className="text-sm">Levels never change automatically. Move students up individually in the Directory, or promote a cohort here.</CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm leading-relaxed text-muted-foreground max-w-prose text-pretty">
+                  Promoting advances every active student one level (400L students graduate) and resets their registration. Use this deliberately, typically at the end of a session.
+                </p>
+                <Button variant="outline" className="gap-2 shrink-0" onClick={() => setIsPromoteOpen(true)}>
+                  <ChevronRight className="h-4 w-4" /> Promote students
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Dialog open={isPromoteOpen} onOpenChange={setIsPromoteOpen}>
+              <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle className="font-serif text-xl font-semibold tracking-tight">Promote students</DialogTitle>
+                  <DialogDescription className="text-sm text-muted-foreground">
+                    Advance every active student one level. 400L students graduate. This does not change the session or semester.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-2 py-2">
+                  {promotableStudents.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">No active students to promote.</p>
+                  ) : promotableStudents.map(s => (
+                    <div key={s.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2.5">
+                      <span className="text-sm font-medium text-foreground">{s.name}</span>
+                      <span className="flex items-center gap-1 text-xs tabular-nums text-muted-foreground">
+                        {s.level || '100L'} <ChevronRight className="h-3 w-3" /> <span className="font-medium text-foreground">{nextLevel(s.level || '100L')}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsPromoteOpen(false)}>Cancel</Button>
+                  <Button disabled={promotableStudents.length === 0} onClick={() => {
+                    const res = promoteStudents();
+                    setIsPromoteOpen(false);
+                    alert(`Promoted ${res.promoted} student${res.promoted === 1 ? '' : 's'}.`);
+                  }}>
+                    Promote {promotableStudents.length} student{promotableStudents.length === 1 ? '' : 's'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
 
             <Card className="rounded-xl border border-border bg-card shadow-sm">
                <CardHeader>
