@@ -9,6 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// Campus imagery shown in the sign-in carousel (left panel).
+const SLIDES = [
+  { src: '/study-image-1.jpg', alt: 'Students studying together at Mountain Top University' },
+  { src: '/manchi.jpg', alt: 'Mountain Top University campus life' },
+  { src: '/dljoy.jpg', alt: 'Mountain Top University campus life' },
+  { src: '/ADMIN.jpg', alt: 'Mountain Top University administrative building' },
+];
+
 export default function LoginPage() {
   const router = useRouter();
   const login = useStore(state => state.login);
@@ -20,11 +28,18 @@ export default function LoginPage() {
   const [emailError, setEmailError] = useState('');
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [slide, setSlide] = useState(0);
 
   // Wait for store to hydrate before allowing login
   useEffect(() => {
     if (hasHydrated) setReady(true);
   }, [hasHydrated]);
+
+  // Auto-advance the sign-in carousel
+  useEffect(() => {
+    const id = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   const validateEmail = (val) => {
     if (!val) return '';
@@ -63,23 +78,55 @@ export default function LoginPage() {
 
   return (
     <main className="min-h-screen grid lg:grid-cols-2 bg-background">
-      {/* Side panel — quiet institutional context */}
-      <aside className="hidden lg:flex flex-col justify-between bg-secondary border-r border-border p-12">
-        <div className="flex items-center gap-3">
-          <img src="/mtu-logo.png" alt="Mountain Top University logo" className="h-10 w-10 object-contain" />
-          <span className="font-serif text-lg font-semibold tracking-tight text-foreground">
-            Mountain Top University
-          </span>
+      {/* Side panel — sliding campus imagery with institutional context */}
+      <aside className="relative hidden lg:block overflow-hidden border-r border-border bg-secondary">
+        {/* Sliding image track */}
+        <div
+          className="absolute inset-0 flex transition-transform duration-700 ease-out"
+          style={{ width: `${SLIDES.length * 100}%`, transform: `translateX(-${slide * (100 / SLIDES.length)}%)` }}
+        >
+          {SLIDES.map((s) => (
+            <div key={s.src} className="relative h-full" style={{ width: `${100 / SLIDES.length}%` }}>
+              <img src={s.src} alt={s.alt} className="h-full w-full object-cover" />
+            </div>
+          ))}
         </div>
-        <div className="max-w-prose space-y-3">
-          <h2 className="font-serif text-2xl font-semibold tracking-tight text-foreground text-balance">
-            The student and staff portal
-          </h2>
-          <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
-            Sign in with your institutional account to reach your courses, results, and campus services.
-          </p>
+
+        {/* Legibility overlay (fixed dark tint, theme-independent) */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/45 to-slate-950/25" />
+
+        {/* Brand content over the imagery */}
+        <div className="relative z-10 flex h-full flex-col justify-between p-12 text-white">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/95 p-1">
+              <img src="/mtu-logo.png" alt="Mountain Top University logo" className="h-full w-full object-contain" />
+            </span>
+            <span className="font-serif text-lg font-semibold tracking-tight">Mountain Top University</span>
+          </div>
+
+          <div className="max-w-prose space-y-4">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight text-balance">
+              The student and staff portal
+            </h2>
+            <p className="text-sm leading-relaxed text-white/80 text-pretty">
+              Sign in with your institutional account to reach your courses, results, and campus services.
+            </p>
+            <div className="flex items-center gap-2 pt-1" role="tablist" aria-label="Campus highlights">
+              {SLIDES.map((s, i) => (
+                <button
+                  key={s.src}
+                  type="button"
+                  onClick={() => setSlide(i)}
+                  aria-label={`Show image ${i + 1}`}
+                  aria-selected={i === slide}
+                  className={`h-1.5 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${i === slide ? 'w-7 bg-white' : 'w-2.5 bg-white/40 hover:bg-white/60'}`}
+                />
+              ))}
+            </div>
+          </div>
+
+          <p className="text-xs font-medium uppercase tracking-wide text-white/70">Empowered to excel</p>
         </div>
-        <p className="text-xs font-medium text-muted-foreground">Empowered to excel</p>
       </aside>
 
       {/* Sign-in form */}
