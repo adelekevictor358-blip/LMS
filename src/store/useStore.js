@@ -65,6 +65,7 @@ export const useStore = create(
         scheduledSessions: [], // Future engagements
         currentSession: '2025/2026',
         currentSemester: '1st',
+        semesterOpen: true, // is the current semester open for registration?
         sessionHistory: [],
         auditingUser: null,
         _hasHydrated: false,
@@ -732,10 +733,11 @@ export const useStore = create(
             if (s === state.currentSession) return {};
             return {
               currentSession: s,
-              currentSemester: '1st', // a new session opens in the first semester
+              currentSemester: '1st', // a new session starts back at the first semester
+              semesterOpen: false,    // ...and is locked until the admin opens a semester
               sessionHistory: [...(state.sessionHistory || []), { session: state.currentSession, closedAt: new Date().toISOString() }],
               notifications: [
-                { id: Date.now(), text: `The ${s} academic session is now open (1st semester). Please register your courses.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+                { id: Date.now(), text: `The ${s} academic session has been created. Registration will open once the registrar opens a semester.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
                 ...state.notifications,
               ],
             };
@@ -743,20 +745,39 @@ export const useStore = create(
           return { success: true, session: s };
         },
 
-        // Provision the open registration semester. Students can only register for
-        // courses in this semester; the other becomes read-only on the registration page.
-        setCurrentSemester: (sem) => {
-          if (sem !== '1st' && sem !== '2nd') return;
+        // ─── REGISTRATION SEMESTER (open / close lifecycle) ───
+        // A new session is locked until the admin opens a semester. Only one
+        // semester is open at a time; closing it locks registration until the
+        // admin reopens it. Closing the 2nd semester is the cue to open a new session.
+        openSemester: (sem) => {
           set((state) => {
-            if (state.currentSemester === sem) return {};
+            const target = (sem === '1st' || sem === '2nd') ? sem : state.currentSemester;
             return {
-              currentSemester: sem,
+              currentSemester: target,
+              semesterOpen: true,
               notifications: [
-                { id: Date.now(), text: `Course registration for the ${sem} semester (${state.currentSession}) is now open.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+                { id: Date.now(), text: `Course registration for the ${target} semester (${state.currentSession}) is now open.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
                 ...state.notifications,
               ],
             };
           });
+        },
+        closeSemester: () => {
+          set((state) => {
+            if (!state.semesterOpen) return {};
+            return {
+              semesterOpen: false,
+              notifications: [
+                { id: Date.now(), text: `Registration for the ${state.currentSemester} semester (${state.currentSession}) is now closed.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+                ...state.notifications,
+              ],
+            };
+          });
+        },
+        // Move focus to the other semester without opening it (stays locked).
+        setSemesterFocus: (sem) => {
+          if (sem !== '1st' && sem !== '2nd') return;
+          set({ currentSemester: sem, semesterOpen: false });
         },
 
         addUser: (userData) => {
@@ -899,6 +920,9 @@ export const useStore = create(
           const state = get();
           const { user } = state;
           if (!user || user.role !== 'student') return;
+
+          // Registration is only possible while the registrar has a semester open.
+          if (!state.semesterOpen) return;
 
           // Students may only self-register for courses at their own level.
           // Other levels are read-only on the registration page.
@@ -1057,6 +1081,7 @@ export const useStore = create(
         courses: state.courses,
         currentSession: state.currentSession,
         currentSemester: state.currentSemester,
+        semesterOpen: state.semesterOpen,
         sessionHistory: state.sessionHistory,
         liveSessions: state.liveSessions,
         scheduledSessions: state.scheduledSessions,

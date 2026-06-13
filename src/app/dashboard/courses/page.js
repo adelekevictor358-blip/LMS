@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export default function StudentCourses() {
-  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, currentSession, currentSemester } = useStore();
+  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, currentSession, currentSemester, semesterOpen } = useStore();
   const [view, setView] = useState('portfolio');
   const [semesterFilter, setSemesterFilter] = useState(currentSemester || '1st');
   const [levelFilter, setLevelFilter] = useState(user?.level || '100L');
@@ -106,8 +106,17 @@ export default function StudentCourses() {
         </button>
       </nav>
 
-      {/* Read-only notice when browsing a level/semester not open for registration */}
-      {view === 'catalog' && (levelFilter !== user?.level || semesterFilter !== currentSemester) && (
+      {/* Registration is locked by the registrar */}
+      {view === 'catalog' && !semesterOpen && (
+        <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+          <Lock size={18} className="text-warning shrink-0 mt-0.5" />
+          <p className="text-sm leading-relaxed text-foreground text-pretty">
+            Course registration is currently <span className="font-medium">closed</span> for {currentSession}. You can browse the catalog, but registration reopens once the registrar opens a semester.
+          </p>
+        </div>
+      )}
+      {/* Read-only notice when a semester is open but you're browsing another level/semester */}
+      {view === 'catalog' && semesterOpen && (levelFilter !== user?.level || semesterFilter !== currentSemester) && (
         <div className="flex items-start gap-3 rounded-xl border border-border bg-muted p-4">
           <Info size={18} className="text-muted-foreground shrink-0 mt-0.5" />
           <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
@@ -137,7 +146,7 @@ export default function StudentCourses() {
           const lecturer = getLecturer(course.lecturerId);
           const isRegistered = enrolledIds.includes(course.id);
           const courseSem = course.semester || semesterFromCode(course.code);
-          const registrable = course.level === user?.level && courseSem === currentSemester;
+          const registrable = semesterOpen && course.level === user?.level && courseSem === currentSemester;
 
           return (
             <Card key={course.id} className="group flex flex-col border border-border rounded-xl transition-colors hover:border-primary/40">
@@ -192,8 +201,8 @@ export default function StudentCourses() {
                        <Plus size={16} /> Register course
                     </Button>
                   ) : (
-                    <Button variant="ghost" className="w-full text-muted-foreground" disabled aria-label={`${course.code} is view only — not open for registration`}>
-                       <Lock size={16} /> View only · {course.level !== user?.level ? course.level : `${courseSem} sem`}
+                    <Button variant="ghost" className="w-full text-muted-foreground" disabled aria-label={`${course.code} is not open for registration`}>
+                       <Lock size={16} /> {!semesterOpen ? 'Registration closed' : `View only · ${course.level !== user?.level ? course.level : `${courseSem} sem`}`}
                     </Button>
                   )}
                </CardFooter>

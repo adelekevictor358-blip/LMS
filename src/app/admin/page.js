@@ -42,7 +42,10 @@ export default function AdminDashboard() {
   const currentSession = useStore(state => state.currentSession);
   const setCurrentSession = useStore(state => state.setCurrentSession);
   const currentSemester = useStore(state => state.currentSemester);
-  const setCurrentSemester = useStore(state => state.setCurrentSemester);
+  const semesterOpen = useStore(state => state.semesterOpen);
+  const openSemester = useStore(state => state.openSemester);
+  const closeSemester = useStore(state => state.closeSemester);
+  const setSemesterFocus = useStore(state => state.setSemesterFocus);
 
   const hasHydrated = useStore(state => state._hasHydrated);
   const dynamicUsers = useStore(state => state.dynamicUsers);
@@ -202,25 +205,39 @@ export default function AdminDashboard() {
                   <CardTitle className="text-lg font-semibold">Academic session</CardTitle>
                   <CardDescription className="text-sm">Set the active session and semester that all students follow.</CardDescription>
                 </div>
-                <Badge variant="secondary" className="font-medium tabular-nums shrink-0">{currentSession} &middot; {currentSemester} sem</Badge>
+                <Badge variant="secondary" className="font-medium tabular-nums shrink-0">{currentSession} &middot; {currentSemester} sem &middot; {semesterOpen ? 'Open' : 'Closed'}</Badge>
               </CardHeader>
               <CardContent className="space-y-5">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-md border border-border bg-muted/40 p-4">
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Open registration semester</p>
-                    <p className="text-xs text-muted-foreground">Students can only register for courses in the open semester &mdash; the other is read-only.</p>
+                    <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                      Registration window &mdash; {currentSemester} semester
+                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${semesterOpen ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${semesterOpen ? 'bg-success' : 'bg-muted-foreground'}`} aria-hidden="true" />
+                        {semesterOpen ? 'Open' : 'Closed'}
+                      </span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {semesterOpen
+                        ? 'Students can register for this semester only. Close it to lock registration.'
+                        : 'Registration is locked. Students cannot register until you open a semester.'}
+                    </p>
                   </div>
-                  <div className="flex gap-1 bg-muted p-1 rounded-md w-fit shrink-0">
-                    {['1st', '2nd'].map(sem => (
-                      <button
-                        key={sem}
-                        type="button"
-                        onClick={() => setCurrentSemester(sem)}
-                        className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${currentSemester === sem ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
-                      >
-                        {sem} semester
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    {semesterOpen ? (
+                      <Button variant="outline" className="h-9" onClick={() => { if (confirm(`Close ${currentSemester} semester registration? Students will not be able to register until you reopen it.`)) closeSemester(); }}>
+                        Close {currentSemester} semester
+                      </Button>
+                    ) : (
+                      <Button className="h-9 gap-2" onClick={() => openSemester(currentSemester)}>
+                        <ChevronRight className="h-4 w-4" /> Open {currentSemester} semester
+                      </Button>
+                    )}
+                    {!semesterOpen && (
+                      <Button variant="ghost" className="h-9" onClick={() => setSemesterFocus(currentSemester === '1st' ? '2nd' : '1st')}>
+                        Go to {currentSemester === '1st' ? '2nd' : '1st'} semester
+                      </Button>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between rounded-md border border-border bg-muted/40 p-4">
