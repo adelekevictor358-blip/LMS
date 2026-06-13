@@ -168,7 +168,7 @@ export default function ChatBot() {
           </header>
 
           {/* Messages */}
-          <div className="flex flex-1 flex-col gap-4 overflow-y-auto bg-background px-4 py-4">
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto min-h-0 bg-background px-4 py-4">
             {messages.map((msg, idx) => (
               <div
                 key={idx}
