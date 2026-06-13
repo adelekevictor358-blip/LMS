@@ -3,39 +3,34 @@
 import { useStore } from '@/store/useStore';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { 
-  Video, Mic, MicOff, VideoOff, PhoneOff, MessageSquare, Users, 
-  Settings, Share2, Hand, Monitor, Layout, Maximize2, 
-  MoreVertical, Send, User, X, Shield, Grid, UserRound,
-  Check, Volume2, HardDrive, Info, Headphones, Loader2, AlertCircle,
-  Copy, Link2, ArrowRight, Signal, Radio, Crown, Heart, ThumbsUp, Laugh, 
-  HandMetal, Smile, Zap, Circle, Disc
+import {
+  Video, Mic, MicOff, VideoOff, MessageSquare, Users,
+  Settings, Hand, Monitor, Send, UserRound,
+  Check, Loader2, Link2, ArrowRight, Signal, Grid, Disc, X,
+  ThumbsUp, Heart, Laugh, Smile, PartyPopper
 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
 export default function CinematicNeuralClassroom() {
   const { id } = useParams();
   const router = useRouter();
-  const { 
-    user, liveSessions, endLiveSession, sendSessionMessage, 
+  const {
+    user, liveSessions, endLiveSession, sendSessionMessage,
     sessionMessages, joinWaitingRoom, admitParticipant, rejectParticipant,
     joinLiveSession
   } = useStore();
-  
+
   // Media States
   const [localStream, setLocalStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [isRequestingMedia, setIsRequestingMedia] = useState(false);
-  
+
   // Call States
   const [hasJoined, setHasJoined] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
@@ -45,14 +40,14 @@ export default function CinematicNeuralClassroom() {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
   const [handRaised, setHandRaised] = useState(false);
-  const [rightPanel, setRightPanel] = useState('none'); 
-  const [viewMode, setViewMode] = useState('gallery'); 
+  const [rightPanel, setRightPanel] = useState('none');
+  const [viewMode, setViewMode] = useState('gallery');
   const [chatInput, setChatInput] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showLinkTooltip, setShowLinkTooltip] = useState(false);
   const [reactions, setReactions] = useState([]);
   const [liveClock, setLiveClock] = useState('');
-  
+
   const videoRef = useRef(null);
   const sessionVideoRef = useRef(null);
   const screenRef = useRef(null);
@@ -155,9 +150,9 @@ export default function CinematicNeuralClassroom() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const addReaction = (emoji) => {
+  const addReaction = (Icon) => {
      const id = Date.now();
-     setReactions(prev => [...prev, { id, emoji, x: Math.random() * 80 + 10 }]);
+     setReactions(prev => [...prev, { id, Icon, x: Math.random() * 80 + 10 }]);
      setTimeout(() => setReactions(prev => prev.filter(r => r.id !== id)), 4000);
   };
 
@@ -197,438 +192,516 @@ export default function CinematicNeuralClassroom() {
     if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [currentSessionMessages, rightPanel]);
 
+  // Neutral dark immersive surface tokens (this view is intentionally always dark)
   if (!session) {
     return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#050505] text-white">
-        <Loader2 className="h-12 w-12 text-blue-600 animate-spin mb-6" />
-        <h1 className="text-sm font-black tracking-[0.5em] text-slate-700 uppercase italic">Reconnecting Hub Sync...</h1>
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-zinc-950 text-zinc-100">
+        <Loader2 size={32} className="text-zinc-400 animate-spin mb-4" strokeWidth={1.5} />
+        <p className="text-sm text-zinc-400">Reconnecting to session…</p>
       </div>
     );
   }
 
-  // Pre-Join Experience
+  // Pre-join screen
   if (!hasJoined) {
     return (
-      <div className="h-screen w-full bg-[#050505] flex items-center justify-center p-8 font-sans overflow-hidden">
-        {/* Animated Background Gradients */}
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/10 blur-[120px] rounded-full animate-pulse" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 blur-[120px] rounded-full animate-pulse delay-1000" />
-        
-        <div className="max-w-7xl w-full grid grid-cols-1 xl:grid-cols-2 gap-24 items-center relative z-10">
-           <div className="relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-[64px] blur opacity-25 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-              <div className="relative aspect-video bg-[#0a0a0a] rounded-[60px] overflow-hidden border border-white/10 shadow-3xl">
-                 {hasPermission ? (
-                    <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
-                 ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-12">
-                       <div className="h-24 w-24 bg-blue-600/10 rounded-full flex items-center justify-center border border-blue-600/20 mb-8 animate-bounce">
-                          <Crown size={40} className="text-blue-500" />
-                       </div>
-                       <h2 className="text-3xl font-black text-white italic tracking-tighter mb-4">Identity Link Required</h2>
-                       <p className="text-slate-500 font-bold max-w-sm">Enable your camera and audio to establish a secure frequency with the institution.</p>
-                       <Button 
-                         className="mt-10 h-16 px-12 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-3xl shadow-2xl shadow-blue-600/30 active:scale-95 transition-all text-lg"
-                         onClick={requestMediaPermissions}
-                         disabled={isRequestingMedia}
-                       >
-                          Establish Link {isRequestingMedia && <Loader2 className="ml-3 animate-spin" />}
-                       </Button>
-                    </div>
-                 )}
-                 <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4 bg-black/60 backdrop-blur-3xl p-4 rounded-3xl border border-white/10">
-                    <Button variant="ghost" size="icon" className={`h-14 w-16 rounded-2xl ${micActive ? 'text-white hover:bg-white/10' : 'bg-red-600 text-white'}`} onClick={() => setMicActive(!micActive)}>{micActive ? <Mic /> : <MicOff />}</Button>
-                    <Button variant="ghost" size="icon" className={`h-14 w-16 rounded-2xl ${videoActive ? 'text-white hover:bg-white/10' : 'bg-red-600 text-white'}`} onClick={() => setVideoActive(!videoActive)}>{videoActive ? <Video /> : <VideoOff />}</Button>
-                 </div>
+      <div className="h-screen w-full bg-zinc-950 text-zinc-100 flex items-center justify-center p-8 font-sans overflow-hidden">
+        <div className="max-w-5xl w-full grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
+          {/* Camera preview */}
+          <div className="relative aspect-video bg-zinc-900 rounded-xl overflow-hidden border border-zinc-800">
+            {hasPermission ? (
+              <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
+            ) : (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-10">
+                <div className="h-14 w-14 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700 mb-5">
+                  <Video size={24} className="text-zinc-400" strokeWidth={1.5} />
+                </div>
+                <h2 className="text-lg font-semibold text-zinc-100 mb-2">Camera and microphone</h2>
+                <p className="text-sm leading-relaxed text-zinc-400 max-w-xs text-pretty">
+                  Enable your camera and microphone to join the session.
+                </p>
+                <Button
+                  className="mt-6"
+                  onClick={requestMediaPermissions}
+                  disabled={isRequestingMedia}
+                >
+                  Enable devices
+                  {isRequestingMedia && <Loader2 size={16} className="ml-2 animate-spin" />}
+                </Button>
               </div>
-           </div>
+            )}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 bg-zinc-900/90 p-2 rounded-full border border-zinc-800">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-11 w-11 rounded-full ${micActive ? 'text-zinc-100 hover:bg-zinc-800 hover:text-zinc-100' : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'}`}
+                onClick={() => setMicActive(!micActive)}
+              >
+                {micActive ? <Mic size={18} /> : <MicOff size={18} />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-11 w-11 rounded-full ${videoActive ? 'text-zinc-100 hover:bg-zinc-800 hover:text-zinc-100' : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'}`}
+                onClick={() => setVideoActive(!videoActive)}
+              >
+                {videoActive ? <Video size={18} /> : <VideoOff size={18} />}
+              </Button>
+            </div>
+          </div>
 
-           <div className="space-y-12">
-              <div className="space-y-6">
-                 <div className="flex items-center gap-4">
-                    <Badge className="bg-blue-600 text-white px-4 py-1.5 rounded-full font-black text-[10px] tracking-[0.3em] uppercase border-none">Institutional V-LINK</Badge>
-                    <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Protocol 4.0 Active</span>
-                 </div>
-                 <h1 className="text-7xl font-black text-white italic tracking-tighter leading-[0.9]">Ready to <br/><span className="text-blue-600">Sync?</span></h1>
-                 <p className="text-2xl font-bold text-slate-400 italic">"{session.title}"</p>
+          {/* Session details */}
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">Live session</span>
+                <span className="flex items-center gap-1.5 text-xs font-medium text-zinc-300">
+                  <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                  Live
+                </span>
               </div>
+              <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-zinc-50 text-balance">
+                Ready to join?
+              </h1>
+              <p className="text-sm leading-relaxed text-zinc-400">{session.title}</p>
+            </div>
 
-              <div className="flex flex-col sm:flex-row gap-6">
-                 <Button 
-                   className="h-20 px-16 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-[40px] text-3xl shadow-[0_30px_70px_rgba(37,99,235,0.4)] active:scale-95 transition-all group"
-                   onClick={handleJoinAttempt}
-                 >
-                    Join Hub <ArrowRight className="ml-4 group-hover:translate-x-3 transition-transform" />
-                 </Button>
-                 <Button variant="ghost" className="h-20 px-12 text-slate-500 hover:text-white font-black text-xl italic uppercase tracking-widest hover:bg-white/5 rounded-[40px]">Test Link</Button>
-              </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button className="group" onClick={handleJoinAttempt}>
+                Join session
+                <ArrowRight size={16} className="ml-2 transition-transform group-hover:translate-x-0.5" />
+              </Button>
+              <Button variant="ghost" className="text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100">
+                Test devices
+              </Button>
+            </div>
 
-              <div className="grid grid-cols-3 gap-6 pt-12 border-t border-white/5">
-                 <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Participants</span>
-                    <span className="text-xl font-black text-white italic">{participantsList.length + 1} Logged</span>
-                 </div>
-                 <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Quality</span>
-                    <span className="text-xl font-black text-blue-500 italic">4K / Lossless</span>
-                 </div>
-                 <div className="flex flex-col gap-2">
-                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Encryption</span>
-                    <span className="text-xl font-black text-teal-500 italic">AES-256</span>
-                 </div>
+            <div className="grid grid-cols-3 gap-4 pt-6 border-t border-zinc-800">
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-zinc-500">Participants</span>
+                <span className="text-sm font-semibold text-zinc-100 tabular-nums">{participantsList.length + 1}</span>
               </div>
-           </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-zinc-500">Quality</span>
+                <span className="text-sm font-semibold text-zinc-100">HD</span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-zinc-500">Encryption</span>
+                <span className="text-sm font-semibold text-zinc-100">AES-256</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  // Standard Main Interactive Interface
+  // In-session interface
   return (
-    <div className="h-screen w-full bg-[#030303] flex overflow-hidden font-sans text-slate-100">
-      <div className="flex-1 flex flex-col relative group">
-         
-         {/* Live Status HUD */}
-         <div className="absolute top-0 left-0 right-0 z-50 p-10 bg-gradient-to-b from-black to-transparent flex justify-between items-start pointer-events-none">
-            <div className="flex gap-8 pointer-events-auto">
-               <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-3">
-                     <Badge className="bg-red-600 text-white font-black text-[10px] px-3 py-1 animate-pulse border-none rounded-sm">LIVE</Badge>
-                     {isRecording && (
-                        <Badge className="bg-white/10 text-white font-black text-[10px] px-3 py-1 flex items-center gap-2 border-none">
-                           <div className="h-2 w-2 bg-red-600 rounded-full animate-pulse" /> REC {formatTime(recordingTime)}
-                        </Badge>
-                     )}
-                  </div>
-                  <h2 className="text-2xl font-black italic tracking-tighter text-white uppercase drop-shadow-2xl">{session.title}</h2>
-                  <div className="flex items-center gap-3">
-                     <span className="text-[11px] font-black text-blue-600 uppercase tracking-widest">{id}</span>
-                     <Separator orientation="vertical" className="h-3 bg-white/20" />
-                     <div className="flex items-center gap-2">
-                        <Signal size={12} className="text-green-500" />
-                        <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest">Stable Link Optimized</span>
-                     </div>
-                  </div>
-               </div>
+    <div className="h-screen w-full bg-zinc-950 flex overflow-hidden font-sans text-zinc-100">
+      <main className="flex-1 flex flex-col relative">
+
+        {/* Session header */}
+        <header className="absolute top-0 left-0 right-0 z-50 p-5 flex justify-between items-start gap-4 pointer-events-none">
+          <div className="flex flex-col gap-2 pointer-events-auto">
+            <div className="flex items-center gap-2">
+              <Badge className="bg-success/15 text-success border-transparent rounded-full font-medium gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                Live
+              </Badge>
+              {isRecording && (
+                <Badge className="bg-destructive/15 text-destructive border-transparent rounded-full font-medium gap-1.5 tabular-nums">
+                  <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                  Rec {formatTime(recordingTime)}
+                </Badge>
+              )}
             </div>
-
-            <div className="flex items-center gap-3 pointer-events-auto">
-               <Button variant="ghost" className="bg-white/5 hover:bg-white/15 text-white h-12 px-8 rounded-2xl border border-white/5 font-black text-sm italic tracking-widest backdrop-blur-xl transition-all" onClick={() => setViewMode(viewMode === 'gallery' ? 'speaker' : 'gallery')}>
-                  {viewMode === 'gallery' ? <UserRound className="mr-3" /> : <Grid className="mr-3" />} Adjust View
-               </Button>
-               <Button variant="ghost" size="icon" className="h-12 w-12 bg-white/5 hover:bg-white/15 rounded-2xl border border-white/5 backdrop-blur-xl" onClick={() => setIsSettingsOpen(true)}>
-                  <Settings size={20} />
-               </Button>
+            <h1 className="font-serif text-lg font-semibold tracking-tight text-zinc-50">{session.title}</h1>
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <span className="font-medium">{id}</span>
+              <Separator orientation="vertical" className="h-3 bg-zinc-700" />
+              <span className="flex items-center gap-1.5">
+                <Signal size={14} className="text-success" />
+                Connection stable
+              </span>
             </div>
-         </div>
+          </div>
 
-         {/* Cinematic Stage Area */}
-         <div className="flex-1 overflow-hidden p-10 pb-44 flex items-center justify-center relative">
-            
-            {/* Reaction Layer */}
-            <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden">
-               {reactions.map(r => (
-                  <div key={r.id} className="absolute bottom-0 text-5xl animate-float-emoji" style={{ left: `${r.x}%` }}>
-                     {r.emoji}
-                  </div>
-               ))}
+          <div className="flex items-center gap-2 pointer-events-auto">
+            <Button
+              variant="ghost"
+              className="h-10 bg-zinc-900/80 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() => setViewMode(viewMode === 'gallery' ? 'speaker' : 'gallery')}
+            >
+              {viewMode === 'gallery' ? <UserRound size={18} className="mr-2" /> : <Grid size={18} className="mr-2" />}
+              Change view
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-10 w-10 bg-zinc-900/80 border border-zinc-800 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-100"
+              onClick={() => setIsSettingsOpen(true)}
+            >
+              <Settings size={18} />
+            </Button>
+          </div>
+        </header>
+
+        {/* Stage area */}
+        <div className="flex-1 overflow-hidden p-6 pt-28 pb-28 flex items-center justify-center relative">
+
+          {/* Reaction layer */}
+          <div className="absolute inset-0 pointer-events-none z-40 overflow-hidden">
+            {reactions.map(r => (
+              <div key={r.id} className="absolute bottom-0 text-primary animate-float-reaction" style={{ left: `${r.x}%` }}>
+                <r.Icon size={36} strokeWidth={1.5} />
+              </div>
+            ))}
+          </div>
+
+          {isSharing ? (
+            <div className="w-full h-full">
+              <div className="w-full h-full relative rounded-xl overflow-hidden border border-zinc-800 bg-black">
+                <video ref={screenRef} autoPlay playsInline className="h-full w-full object-contain" />
+                <div className="absolute top-4 left-4">
+                  <Badge className="bg-success/15 text-success border-transparent rounded-full font-medium gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                    Sharing screen
+                  </Badge>
+                </div>
+                <div className="absolute bottom-4 right-4">
+                  <Button variant="destructive" onClick={stopScreenShare}>Stop sharing</Button>
+                </div>
+              </div>
             </div>
+          ) : viewMode === 'gallery' ? (
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 w-full max-w-[1600px] h-full auto-rows-fr">
+              {/* Host tile */}
+              <div className="relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 transition-colors hover:border-primary/40">
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Avatar className="h-24 w-24 border border-zinc-700">
+                    <AvatarFallback className="bg-primary text-3xl font-semibold text-primary-foreground">{session.lecturerName[0]}</AvatarFallback>
+                  </Avatar>
+                </div>
+                <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-zinc-950/80 px-3 py-1.5 rounded-md border border-zinc-800">
+                  <span className="h-2 w-2 rounded-full bg-success" />
+                  <span className="text-xs font-medium text-zinc-100">{session.lecturerName} (host)</span>
+                </div>
+              </div>
 
-            {/* Content Logic */}
-            {isSharing ? (
-               <div className="w-full h-full p-8">
-                  <div className="w-full h-full relative rounded-[64px] overflow-hidden shadow-4xl border-[12px] border-blue-600/50 bg-black">
-                     <video ref={screenRef} autoPlay playsInline className="h-full w-full object-contain" />
-                     <div className="absolute top-10 left-10 bg-blue-600 text-white font-black px-8 py-3 rounded-2xl text-lg italic tracking-tighter shadow-2xl animate-pulse">
-                        PROJECTING SCREEN TRANSMISSION
-                     </div>
-                     <div className="absolute bottom-10 right-10">
-                        <Button className="bg-red-600 hover:bg-red-700 text-white font-black h-16 px-10 rounded-2xl shadow-3xl text-sm italic" onClick={stopScreenShare}>STOP PROJECTION</Button>
-                     </div>
-                  </div>
-               </div>
-            ) : viewMode === 'gallery' ? (
-               <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 w-full max-w-[1600px] h-full automotive-grid auto-rows-fr">
-                  {/* Host Tile */}
-                  <div className="relative rounded-[56px] overflow-hidden bg-gradient-to-br from-[#111] to-black border-4 border-white/5 shadow-2xl transition-all duration-700 hover:scale-[1.02] hover:border-blue-600 group">
-                      <div className="absolute inset-0 flex items-center justify-center">
-                         <Avatar className="h-44 w-44 border-[12px] border-slate-900 group-hover:scale-110 transition-transform duration-700 shadow-4xl shadow-blue-600/20">
-                            <AvatarFallback className="bg-blue-600 text-6xl font-black text-white italic">{session.lecturerName[0]}</AvatarFallback>
-                         </Avatar>
-                      </div>
-                      <div className="absolute bottom-10 left-10 flex items-center gap-4 bg-black/80 backdrop-blur-3xl px-6 py-3 rounded-[24px] border border-white/10">
-                         <div className="h-3 w-3 rounded-full bg-blue-600 animate-pulse shadow-lg shadow-blue-600/50" />
-                         <span className="text-sm font-black italic uppercase text-white shadow-sm">{session.lecturerName} (Lead)</span>
-                      </div>
-                  </div>
-
-                  {/* Local Identity Feed */}
-                  <div className="relative rounded-[56px] overflow-hidden bg-[#111] border-4 border-blue-600/60 shadow-3xl shadow-blue-600/20 transition-all duration-700 hover:scale-[1.02]">
-                     <div className="absolute inset-0 bg-black flex items-center justify-center">
-                        {videoActive ? (
-                           <video ref={sessionVideoRef} autoPlay playsInline muted className="h-full w-full object-cover scale-x-[-1] brightness-125 contrast-125" />
-                        ) : (
-                           <Avatar className="h-36 w-36 border-[8px] border-slate-900 grayscale">
-                              <AvatarFallback className="bg-slate-800 text-5xl font-black text-slate-500">{user?.name[0]}</AvatarFallback>
-                           </Avatar>
-                        )}
-                        {handRaised && (
-                           <div className="absolute top-10 right-10 bg-yellow-400 p-4 rounded-3xl shadow-2xl animate-bounce border-4 border-black">
-                              <Hand size={32} className="text-black" />
-                           </div>
-                        )}
-                     </div>
-                     <div className="absolute bottom-10 left-10 flex items-center gap-4 bg-black/80 backdrop-blur-3xl px-6 py-3 rounded-[24px] border border-white/10">
-                        {micActive ? <div className="h-2 w-2 rounded-full bg-green-500 animate-bounce" /> : <MicOff size={16} className="text-red-500" />}
-                        <span className="text-sm font-black italic uppercase text-white">{user?.name} (You)</span>
-                     </div>
-                  </div>
-
-                  {/* Other Syncs */}
-                  {participantsList.filter(p => p.id !== user.id).map(p => (
-                     <div key={p.id} className="relative rounded-[56px] overflow-hidden bg-[#0a0a0a] border-4 border-white/5 opacity-80 hover:opacity-100 transition-all duration-500">
-                        <div className="absolute inset-0 flex items-center justify-center">
-                           <Avatar className="h-32 w-32 border-8 border-slate-900 grayscale opacity-40">
-                              <AvatarFallback className="bg-slate-900 text-white font-black italic">{p.name[0]}</AvatarFallback>
-                           </Avatar>
-                        </div>
-                        <div className="absolute bottom-10 left-10 flex items-center gap-4 bg-black/80 backdrop-blur-3xl px-6 py-3 rounded-[24px] border border-white/10">
-                           <MicOff size={14} className="text-slate-600" />
-                           <span className="text-[11px] font-black uppercase text-slate-500">{p.name}</span>
-                        </div>
-                     </div>
-                  ))}
-               </div>
-            ) : (
-               <div className="w-full max-w-7xl aspect-video relative rounded-[100px] overflow-hidden shadow-4xl border-[10px] border-blue-600 bg-black group">
-                  <div className="absolute inset-0 flex items-center justify-center bg-[#070707]">
-                      <div className="relative">
-                         <div className="absolute -inset-10 bg-blue-600/20 blur-[100px] rounded-full animate-pulse" />
-                         <Avatar className="h-80 w-80 border-[20px] border-black shadow-[0_0_100px_rgba(37,99,235,0.4)] animate-in zoom-in-75 duration-700 relative z-10">
-                            <AvatarFallback className="bg-blue-600 text-[140px] font-black text-white italic drop-shadow-2xl">{session.lecturerName[0]}</AvatarFallback>
-                         </Avatar>
-                      </div>
-                  </div>
-                  <div className="absolute bottom-16 left-16 flex items-center gap-10 bg-black/80 backdrop-blur-[40px] p-12 rounded-[56px] border border-white/10 shadow-4xl group-hover:scale-105 transition-transform duration-700">
-                     <div className="h-8 w-8 rounded-full bg-blue-600 animate-pulse shadow-4xl shadow-blue-600/60" />
-                     <div className="flex flex-col">
-                        <span className="text-[14px] font-black uppercase text-blue-500 tracking-[0.6em] mb-4 italic">Lead Transmissions Active</span>
-                        <span className="font-black text-7xl italic text-white tracking-tighter leading-none shadow-sm">{session.lecturerName}</span>
-                     </div>
-                  </div>
-               </div>
-            )}
-         </div>
-
-         {/* Master Control Dashboard (Zoom / Standard Style) */}
-         <div className="absolute bottom-12 left-1/2 -translate-x-1/2 h-[120px] bg-[#111]/90 backdrop-blur-3xl border border-white/10 px-14 flex items-center gap-10 z-[100] rounded-[60px] shadow-[0_50px_150px_rgba(0,0,0,0.8)] ring-1 ring-white/5 animation-pop">
-            
-            <div className="flex items-center gap-5 border-r border-white/10 pr-10">
-               <div className="flex flex-col items-center gap-2">
-                  <Button variant="ghost" size="icon" className={`h-18 w-20 rounded-[28px] ${!micActive ? 'bg-red-600 text-white shadow-xl shadow-red-600/40 hover:bg-red-700' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`} onClick={() => setMicActive(!micActive)}>
-                     {micActive ? <Mic size={28} /> : <MicOff size={28} />}
-                  </Button>
-                  <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{micActive ? 'Mute' : 'Unmute'}</span>
-               </div>
-               <div className="flex flex-col items-center gap-2">
-                  <Button variant="ghost" size="icon" className={`h-18 w-20 rounded-[28px] ${!videoActive ? 'bg-red-600 text-white shadow-xl shadow-red-600/40 hover:bg-red-700' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`} onClick={() => setVideoActive(!videoActive)}>
-                     {videoActive ? <Video size={28} /> : <VideoOff size={28} />}
-                  </Button>
-                  <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest">{videoActive ? 'Stop' : 'Start'} Video</span>
-               </div>
-            </div>
-            <div className="text-[11px] font-black text-slate-500 tabular-nums tracking-widest border-r border-white/10 pr-10">{liveClock}</div>
-
-            <div className="flex items-center gap-4">
-               <div className="flex flex-col items-center gap-2">
-                  <Button variant="ghost" size="icon" className={`h-18 w-20 rounded-[28px] ${rightPanel === 'participants' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-white/10'}`} onClick={() => setRightPanel(rightPanel === 'participants' ? 'none' : 'participants')}>
-                     <Users size={28} />
-                  </Button>
-                  <Badge className="absolute -top-1 -right-1 bg-blue-600 text-[10px] font-bold border-none">{participantsList.length + 1}</Badge>
-               </div>
-               <div className="flex flex-col items-center gap-2">
-                  <Button variant="ghost" size="icon" className={`h-18 w-20 rounded-[28px] ${rightPanel === 'chat' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-white/10'}`} onClick={() => setRightPanel(rightPanel === 'chat' ? 'none' : 'chat')}>
-                     <MessageSquare size={28} />
-                  </Button>
-               </div>
-               <div className="flex flex-col items-center gap-2">
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className={`h-18 w-20 rounded-[28px] transition-all ${isSharing ? 'bg-green-600 text-white animate-pulse' : 'text-blue-500 hover:bg-blue-600/10'}`} 
-                    onClick={isSharing ? stopScreenShare : startScreenShare}
-                  >
-                     <Monitor size={28} />
-                  </Button>
-               </div>
-               <div className="flex flex-col items-center gap-2">
-                  <Button variant="ghost" size="icon" className={`h-18 w-20 rounded-[28px] ${isRecording ? 'bg-red-600 text-white animate-pulse' : 'text-slate-400 hover:bg-white/10'}`} onClick={() => setIsRecording(!isRecording)}>
-                     <Disc size={28} />
-                  </Button>
-               </div>
-               <div className="flex flex-col items-center gap-2">
-                  <Button variant="ghost" size="icon" className={`h-18 w-20 rounded-[28px] ${handRaised ? 'bg-yellow-400 text-black' : 'text-slate-400 hover:bg-yellow-400/10'}`} onClick={() => setHandRaised(!handRaised)}>
-                     <Hand size={28} />
-                  </Button>
-               </div>
-               
-               {/* Reaction Toolbar */}
-               <div className="h-16 px-4 bg-white/5 rounded-full flex items-center gap-2 mx-4 group-hover:scale-105 transition-all">
-                  {[ 
-                    { e: '👍', n: 'Thumb' }, { e: '❤️', n: 'Heart' }, { e: '😂', n: 'Laughter' }, { e: '😮', n: 'Surprise' }, { e: '🎉', n: 'Celebrate' } 
-                  ].map(emo => (
-                     <button key={emo.n} className="text-2xl hover:scale-150 active:scale-95 transition-all p-2 rounded-xl hover:bg-white/10" onClick={() => addReaction(emo.e)}>{emo.e}</button>
-                  ))}
-               </div>
-            </div>
-
-            <div className="pl-10 ml-4 border-l border-white/10 flex items-center gap-8">
-               <div className="flex flex-col items-center gap-2">
-                  <Button variant="ghost" size="icon" className="h-18 w-20 rounded-[28px] text-slate-400 hover:bg-blue-600/10 hover:text-blue-500 transition-all" onClick={copyLink}>
-                     <Link2 size={28} />
-                  </Button>
-                  {showLinkTooltip && (
-                     <Badge className="absolute -top-12 bg-blue-600 text-white font-black text-[10px] px-4 py-1 rounded-sm border-none shadow-3xl animate-in slide-in-from-bottom">Copied link</Badge>
+              {/* Local feed */}
+              <div className="relative rounded-xl overflow-hidden bg-zinc-900 border border-primary/50">
+                <div className="absolute inset-0 bg-black flex items-center justify-center">
+                  {videoActive ? (
+                    <video ref={sessionVideoRef} autoPlay playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
+                  ) : (
+                    <Avatar className="h-20 w-20 border border-zinc-700">
+                      <AvatarFallback className="bg-zinc-800 text-2xl font-semibold text-zinc-400">{user?.name[0]}</AvatarFallback>
+                    </Avatar>
                   )}
-               </div>
-               <Button className="bg-red-600 hover:bg-red-700 text-white font-black px-12 h-20 rounded-[36px] shadow-3xl shadow-red-600/40 active:scale-95 transition-all text-lg italic tracking-tighter" onClick={handleEndCall}>
-                  Terminate Link
-               </Button>
-            </div>
-         </div>
-      </div>
+                  {handRaised && (
+                    <div className="absolute top-3 right-3 bg-gold/15 text-gold p-2 rounded-md border border-gold/30">
+                      <Hand size={18} />
+                    </div>
+                  )}
+                </div>
+                <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-zinc-950/80 px-3 py-1.5 rounded-md border border-zinc-800">
+                  {micActive ? <span className="h-2 w-2 rounded-full bg-success" /> : <MicOff size={14} className="text-destructive" />}
+                  <span className="text-xs font-medium text-zinc-100">{user?.name} (you)</span>
+                </div>
+              </div>
 
-      {/* Slide Integration Panels (Right) */}
+              {/* Other participants */}
+              {participantsList.filter(p => p.id !== user.id && p.id !== session.lecturerId).map(p => (
+                <div key={p.id} className="relative rounded-xl overflow-hidden bg-zinc-900 border border-zinc-800 transition-colors hover:border-zinc-700">
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Avatar className="h-20 w-20 border border-zinc-700">
+                      <AvatarFallback className="bg-zinc-800 text-zinc-400 font-semibold">{p.name[0]}</AvatarFallback>
+                    </Avatar>
+                  </div>
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-zinc-950/80 px-3 py-1.5 rounded-md border border-zinc-800">
+                    <MicOff size={14} className="text-zinc-500" />
+                    <span className="text-xs font-medium text-zinc-300">{p.name}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="w-full max-w-6xl aspect-video relative rounded-xl overflow-hidden border border-zinc-800 bg-black">
+              <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
+                <Avatar className="h-44 w-44 border border-zinc-700">
+                  <AvatarFallback className="bg-primary text-7xl font-semibold text-primary-foreground">{session.lecturerName[0]}</AvatarFallback>
+                </Avatar>
+              </div>
+              <div className="absolute bottom-6 left-6 flex items-center gap-3 bg-zinc-950/80 px-4 py-3 rounded-md border border-zinc-800">
+                <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium text-zinc-400">Speaking</span>
+                  <span className="font-serif text-lg font-semibold text-zinc-50">{session.lecturerName}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Control bar */}
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 h-16 bg-zinc-900/90 border border-zinc-800 px-4 flex items-center gap-3 z-[100] rounded-xl shadow-lg">
+
+          <div className="flex items-center gap-2 border-r border-zinc-800 pr-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-11 w-11 rounded-md ${!micActive ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
+              onClick={() => setMicActive(!micActive)}
+              title={micActive ? 'Mute' : 'Unmute'}
+            >
+              {micActive ? <Mic size={18} /> : <MicOff size={18} />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-11 w-11 rounded-md ${!videoActive ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
+              onClick={() => setVideoActive(!videoActive)}
+              title={videoActive ? 'Stop video' : 'Start video'}
+            >
+              {videoActive ? <Video size={18} /> : <VideoOff size={18} />}
+            </Button>
+          </div>
+
+          <span className="text-xs font-medium text-zinc-400 tabular-nums border-r border-zinc-800 pr-3">{liveClock}</span>
+
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className={`h-11 w-11 rounded-md ${rightPanel === 'participants' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
+                onClick={() => setRightPanel(rightPanel === 'participants' ? 'none' : 'participants')}
+                title="Participants"
+              >
+                <Users size={18} />
+              </Button>
+              <Badge className="absolute -top-1 -right-1 h-5 min-w-5 justify-center px-1 bg-primary text-primary-foreground border-transparent text-[10px] font-medium tabular-nums">{participantsList.length + 1}</Badge>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-11 w-11 rounded-md ${rightPanel === 'chat' ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
+              onClick={() => setRightPanel(rightPanel === 'chat' ? 'none' : 'chat')}
+              title="Chat"
+            >
+              <MessageSquare size={18} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-11 w-11 rounded-md ${isSharing ? 'bg-primary text-primary-foreground hover:bg-primary/90' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
+              onClick={isSharing ? stopScreenShare : startScreenShare}
+              title={isSharing ? 'Stop sharing' : 'Share screen'}
+            >
+              <Monitor size={18} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-11 w-11 rounded-md ${isRecording ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
+              onClick={() => setIsRecording(!isRecording)}
+              title={isRecording ? 'Stop recording' : 'Record'}
+            >
+              <Disc size={18} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-11 w-11 rounded-md ${handRaised ? 'bg-gold/15 text-gold hover:bg-gold/25' : 'text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100'}`}
+              onClick={() => setHandRaised(!handRaised)}
+              title="Raise hand"
+            >
+              <Hand size={18} />
+            </Button>
+
+            {/* Reactions */}
+            <div className="h-11 px-2 bg-zinc-800/60 rounded-md flex items-center gap-1 ml-1">
+              {[
+                { Icon: ThumbsUp, n: 'Thumbs up' }, { Icon: Heart, n: 'Heart' }, { Icon: Laugh, n: 'Laughter' }, { Icon: Smile, n: 'Smile' }, { Icon: PartyPopper, n: 'Celebrate' }
+              ].map(reaction => (
+                <button
+                  key={reaction.n}
+                  className="p-1.5 rounded-md text-zinc-300 transition-colors hover:bg-zinc-700 hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-900 active:translate-y-px"
+                  onClick={() => addReaction(reaction.Icon)}
+                  aria-label={`React with ${reaction.n}`}
+                >
+                  <reaction.Icon size={18} />
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pl-3 border-l border-zinc-800 flex items-center gap-2">
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 rounded-md text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={copyLink}
+                title="Copy invite link"
+              >
+                <Link2 size={18} />
+              </Button>
+              {showLinkTooltip && (
+                <Badge className="absolute -top-9 left-1/2 -translate-x-1/2 bg-zinc-800 text-zinc-100 border-transparent text-xs font-medium animate-fade-in whitespace-nowrap">Link copied</Badge>
+              )}
+            </div>
+            <Button variant="destructive" className="font-medium" onClick={handleEndCall}>
+              Leave
+            </Button>
+          </div>
+        </div>
+      </main>
+
+      {/* Side panel */}
       {rightPanel !== 'none' && (
-         <div className="w-[480px] bg-[#0a0a0a] border-l border-white/10 flex flex-col animate-in slide-in-from-right duration-700 shadow-5xl z-[200]">
-            <div className="p-12 border-b border-white/5 flex items-center justify-between bg-black/60 backdrop-blur-xl">
-               <div>
-                  <h3 className="font-black text-xl italic uppercase tracking-[0.4em] text-white underline decoration-blue-600 decoration-4 underline-offset-8">
-                     {rightPanel === 'chat' ? 'Broadcast' : 'Registry'}
-                  </h3>
-                  <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mt-6">Secure Frequency ID: <span className="text-blue-500">{id}</span></p>
-               </div>
-               <Button variant="ghost" size="icon" className="h-14 w-14 text-slate-500 hover:text-white rounded-3xl" onClick={() => setRightPanel('none')}>
-                  <X size={28} strokeWidth={3} />
-               </Button>
+        <aside className="w-[380px] bg-zinc-900 border-l border-zinc-800 flex flex-col animate-fade-in z-[200]">
+          <header className="p-5 border-b border-zinc-800 flex items-center justify-between">
+            <div>
+              <h2 className="font-serif text-lg font-semibold tracking-tight text-zinc-50">
+                {rightPanel === 'chat' ? 'Chat' : 'Participants'}
+              </h2>
+              <p className="text-xs text-zinc-500 mt-1">
+                Session <span className="text-zinc-300">{id}</span>
+              </p>
             </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100 rounded-md"
+              onClick={() => setRightPanel('none')}
+              title="Close"
+            >
+              <X size={18} />
+            </Button>
+          </header>
 
-            {rightPanel === 'chat' ? (
-               <>
-                  <ScrollArea className="flex-1 p-12">
-                     <div className="space-y-12">
-                        {currentSessionMessages.map((m, i) => (
-                           <div key={i} className="flex flex-col gap-5 animate-in fade-in slide-in-from-bottom-6 duration-500">
-                              <div className="flex justify-between items-baseline px-4">
-                                 <span className={`text-[12px] font-black uppercase tracking-[0.3em] ${m.fromId === user?.id ? 'text-blue-500' : 'text-slate-500'}`}>{m.fromName}</span>
-                                 <span className="text-[10px] text-slate-800 font-bold">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                              </div>
-                              <div className={`p-8 rounded-[48px] rounded-tl-none border-2 ${m.fromId === user?.id ? 'bg-blue-600/10 border-blue-500/20 text-blue-50 shadow-2xl' : 'bg-[#111] border-white/5 text-slate-300 shadow-xl'}`}>
-                                 <p className="text-lg font-bold leading-relaxed">{m.content}</p>
-                              </div>
-                           </div>
-                        ))}
-                        <div ref={chatEndRef} />
-                     </div>
-                  </ScrollArea>
-                  <div className="p-12 border-t border-white/5 bg-black">
-                     <form onSubmit={(e) => { e.preventDefault(); if(chatInput.trim()) { sendSessionMessage(id, chatInput.trim()); setChatInput(''); } }} className="relative">
-                        <Input 
-                          className="bg-[#111] border-white/10 h-20 rounded-[40px] text-lg focus-visible:ring-blue-600 pr-24 font-black italic shadow-inner pl-10" 
-                          placeholder="Type identifier..." 
-                          value={chatInput}
-                          onChange={e => setChatInput(e.target.value)}
-                        />
-                        <Button type="submit" size="icon" className="absolute right-3 top-3 h-14 w-14 bg-blue-600 hover:bg-blue-700 text-white rounded-[24px] shadow-3xl shadow-blue-600/40">
-                           <Send size={28} />
-                        </Button>
-                     </form>
+          {rightPanel === 'chat' ? (
+            <>
+              <ScrollArea className="flex-1 p-5">
+                {currentSessionMessages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center py-16">
+                    <MessageSquare size={28} className="text-zinc-600 mb-3" strokeWidth={1.5} />
+                    <p className="text-sm text-zinc-500">No messages yet. Start the conversation.</p>
                   </div>
-               </>
-            ) : (
-               <ScrollArea className="flex-1 p-10">
-                  <div className="space-y-12">
-                     {user?.role === 'lecturer' && session.waitingParticipants?.length > 0 && (
-                        <div className="space-y-8">
-                           <h4 className="text-[13px] font-black uppercase tracking-[0.4em] text-blue-500 px-8 flex items-center gap-4 italic underline decoration-blue-600/20">
-                              <Loader2 size={18} className="animate-spin" /> Admission Control ({session.waitingParticipants.length})
-                           </h4>
-                           <div className="space-y-4">
-                              {session.waitingParticipants.map(p => (
-                                 <div key={p.userId} className="p-8 bg-blue-600/5 border border-blue-500/10 rounded-[48px] flex items-center justify-between shadow-2xl animate-in zoom-in-95">
-                                    <div className="flex items-center gap-6">
-                                       <Avatar className="h-16 w-16 ring-4 ring-blue-600/20">
-                                          <AvatarFallback className="bg-slate-900 text-xs font-black italic text-slate-500">{p.name[0]}</AvatarFallback>
-                                       </Avatar>
-                                       <div className="flex flex-col">
-                                          <span className="text-lg font-black italic text-white uppercase tracking-tighter">{p.name}</span>
-                                          <span className="text-[11px] font-black text-slate-600 uppercase tracking-widest mt-1">Institutional Identity Verified</span>
-                                       </div>
-                                    </div>
-                                    <div className="flex gap-4">
-                                       <Button variant="ghost" size="icon" className="h-14 w-14 text-red-500 hover:bg-red-500/20 rounded-3xl" onClick={() => rejectParticipant(id, p.userId)}><X size={32} /></Button>
-                                       <Button variant="ghost" size="icon" className="h-14 w-14 text-teal-400 hover:bg-teal-400/20 rounded-3xl" onClick={() => admitParticipant(id, p.userId)}><Check size={32} /></Button>
-                                    </div>
-                                 </div>
-                              ))}
-                           </div>
-                           <Separator className="bg-white/5 my-12" />
+                ) : (
+                  <div className="space-y-5">
+                    {currentSessionMessages.map((m, i) => (
+                      <div key={i} className="flex flex-col gap-1.5 animate-fade-in">
+                        <div className="flex justify-between items-baseline gap-3">
+                          <span className={`text-xs font-medium ${m.fromId === user?.id ? 'text-primary' : 'text-zinc-300'}`}>{m.fromName}</span>
+                          <span className="text-xs text-zinc-600 tabular-nums">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                     )}
+                        <div className={`p-3 rounded-md border ${m.fromId === user?.id ? 'bg-primary/10 border-primary/20 text-zinc-100' : 'bg-zinc-800/60 border-zinc-800 text-zinc-200'}`}>
+                          <p className="text-sm leading-relaxed text-pretty">{m.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                  </div>
+                )}
+              </ScrollArea>
+              <div className="p-5 border-t border-zinc-800">
+                <form onSubmit={(e) => { e.preventDefault(); if(chatInput.trim()) { sendSessionMessage(id, chatInput.trim()); setChatInput(''); } }} className="relative">
+                  <Input
+                    className="h-11 rounded-md bg-zinc-800 border-zinc-700 text-zinc-100 placeholder:text-zinc-500 pr-12"
+                    placeholder="Type a message…"
+                    value={chatInput}
+                    onChange={e => setChatInput(e.target.value)}
+                  />
+                  <Button type="submit" size="icon" className="absolute right-1.5 top-1.5 h-8 w-8 rounded-md">
+                    <Send size={16} />
+                  </Button>
+                </form>
+              </div>
+            </>
+          ) : (
+            <ScrollArea className="flex-1 p-5">
+              <div className="space-y-6">
+                {user?.role === 'lecturer' && session.waitingParticipants?.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-400 flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin" />
+                      Waiting room ({session.waitingParticipants.length})
+                    </h3>
+                    <div className="space-y-2">
+                      {session.waitingParticipants.map(p => (
+                        <div key={p.userId} className="p-3 bg-zinc-800/60 border border-zinc-800 rounded-md flex items-center justify-between animate-fade-in">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
+                              <AvatarFallback className="bg-zinc-700 text-xs font-medium text-zinc-300">{p.name[0]}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium text-zinc-100">{p.name}</span>
+                              <span className="text-xs text-zinc-500">Verified identity</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive hover:bg-destructive/15 hover:text-destructive rounded-md" onClick={() => rejectParticipant(id, p.userId)} title="Reject">
+                              <X size={18} />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-9 w-9 text-success hover:bg-success/15 hover:text-success rounded-md" onClick={() => admitParticipant(id, p.userId)} title="Admit">
+                              <Check size={18} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <Separator className="bg-zinc-800 my-2" />
+                  </div>
+                )}
 
-                     <div className="space-y-8">
-                        <h4 className="text-[13px] font-black uppercase tracking-[0.4em] text-slate-600 px-8 italic">Synchronized registry</h4>
-                        <div className="p-8 bg-blue-600/5 rounded-[56px] border border-blue-600/10 flex items-center justify-between mb-12 shadow-4xl ring-8 ring-blue-600/5">
-                           <div className="flex items-center gap-6">
-                              <Avatar className="h-18 w-18 border-4 border-blue-600 shadow-4xl">
-                                 <AvatarFallback className="bg-slate-900 text-white font-black italic text-xl">ME</AvatarFallback>
-                              </Avatar>
-                              <div className="flex flex-col">
-                                 <span className="text-xl font-black italic text-white uppercase tracking-tight">{user?.name} (You)</span>
-                                 <span className="text-[12px] font-black text-blue-500 uppercase tracking-widest mt-1">{user?.role === 'lecturer' ? 'Administrative Lead' : 'Synchronized Entity'}</span>
-                              </div>
-                           </div>
-                           {!micActive && <MicOff size={24} className="text-red-500" />}
-                        </div>
-                        
-                        {participantsList.filter(p => p.id !== user.id && p.id !== session.lecturerId).map(p => (
-                           <div key={p.id} className="p-8 hover:bg-white/5 transition-all flex items-center justify-between rounded-[48px] border border-transparent hover:border-white/5">
-                              <div className="flex items-center gap-6">
-                                 <Avatar className="h-16 w-16 bg-slate-900 shadow-2xl opacity-50">
-                                    <AvatarFallback className="text-xl font-black italic opacity-40">{p.name[0]}</AvatarFallback>
-                                 </Avatar>
-                                 <div className="flex flex-col">
-                                    <span className="text-lg font-black italic text-slate-400 uppercase tracking-tighter">{p.name}</span>
-                                    <span className="text-[11px] font-black text-slate-700 uppercase tracking-widest mt-1">{p.role} Identity</span>
-                                 </div>
-                              </div>
-                           </div>
-                        ))}
-                     </div>
+                <div className="space-y-3">
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-zinc-400">In session</h3>
+                  <div className="p-3 bg-primary/10 rounded-md border border-primary/20 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9 border border-primary/40">
+                        <AvatarFallback className="bg-zinc-800 text-sm font-medium text-zinc-100">ME</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium text-zinc-100">{user?.name} (you)</span>
+                        <span className="text-xs text-primary">{user?.role === 'lecturer' ? 'Host' : 'Participant'}</span>
+                      </div>
+                    </div>
+                    {!micActive && <MicOff size={16} className="text-destructive" />}
                   </div>
-               </ScrollArea>
-            )}
-         </div>
+
+                  {participantsList.filter(p => p.id !== user.id && p.id !== session.lecturerId).map(p => (
+                    <div key={p.id} className="p-3 rounded-md border border-transparent transition-colors hover:bg-zinc-800/60 hover:border-zinc-800 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9">
+                          <AvatarFallback className="bg-zinc-800 text-sm font-medium text-zinc-400">{p.name[0]}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-zinc-300">{p.name}</span>
+                          <span className="text-xs text-zinc-500 capitalize">{p.role}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+        </aside>
       )}
 
-      {/* Style Animations */}
+      {/* Reaction float animation */}
       <style jsx global>{`
-         @keyframes float-emoji {
+         @keyframes float-reaction {
             0% { transform: translateY(0) scale(0.5); opacity: 0; }
-            20% { opacity: 1; transform: translateY(-20vh) scale(1.2); }
+            20% { opacity: 1; transform: translateY(-20vh) scale(1.1); }
             80% { opacity: 1; transform: translateY(-80vh) scale(1); }
-            100% { transform: translateY(-100vh) scale(0.8); opacity: 0; }
+            100% { transform: translateY(-100vh) scale(0.9); opacity: 0; }
          }
-         .animate-float-emoji {
-            animation: float-emoji 4s ease-in forwards;
-         }
-         .animation-pop {
-            animation: pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-         }
-         @keyframes pop {
-            from { transform: translate(-50%, 50px) scale(0.8); opacity: 0; }
-            to { transform: translate(-50%, 0) scale(1); opacity: 1; }
+         .animate-float-reaction {
+            animation: float-reaction 4s ease-in forwards;
          }
       `}</style>
     </div>

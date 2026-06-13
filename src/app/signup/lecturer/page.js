@@ -3,14 +3,12 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
-import { useState, useMemo, useEffect } from 'react';
-import { GraduationCap, Mail, User, Building2, MapPin, Briefcase, ShieldCheck, Fingerprint, Lock, ArrowRight, UserPlus } from 'lucide-react';
-import adminImg from '@/ADMIN.jpg';
+import { useState, useMemo } from 'react';
+import { GraduationCap, Mail, User, Building2, Briefcase, ShieldCheck, Fingerprint, Lock, ArrowRight, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 export default function LecturerSignup() {
   const router = useRouter();
@@ -23,13 +21,13 @@ export default function LecturerSignup() {
   const [emailError, setEmailError] = useState('');
 
   const [form, setForm] = useState({
-    name: '', 
-    email: '', 
+    name: '',
+    email: '',
     staffId: '',
-    college: '', 
-    program: '', 
-    title: 'Dr.', 
-    rank: 'Lecturer I', 
+    college: '',
+    program: '',
+    title: 'Dr.',
+    rank: 'Lecturer I',
     phone: ''
   });
 
@@ -39,19 +37,19 @@ export default function LecturerSignup() {
       setIsVerified(true);
       setPinError('');
     } else {
-      setPinError('Invalid Institutional Access PIN. Please contact IT Administration.');
+      setPinError('Invalid access PIN. Please contact IT administration.');
     }
   };
 
-  const selectedCollege = useMemo(() => 
-    structure.colleges.find(c => c.name === form.college), 
+  const selectedCollege = useMemo(() =>
+    structure.colleges.find(c => c.name === form.college),
     [form.college, structure]
   );
 
   const validateEmail = (email) => {
     if (!email) return '';
     if (!email.toLowerCase().endsWith('@mtu.edu.ng')) {
-      return 'Faculty must register with an official MTU institutional email (@mtu.edu.ng). External email providers such as @gmail.com or @yahoo.com are not authorised.';
+      return 'Faculty must register with an official MTU institutional email (@mtu.edu.ng). External providers such as @gmail.com or @yahoo.com are not authorised.';
     }
     return '';
   };
@@ -82,221 +80,210 @@ export default function LecturerSignup() {
     }, 800);
   };
 
-  return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 bg-slate-950 overflow-hidden">
-      {/* Background */}
-      <div 
-        className="absolute inset-0 z-0 opacity-20 grayscale brightness-50"
-        style={{ 
-          backgroundImage: `url(${adminImg.src})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }}
-      ></div>
-      <div className="absolute inset-0 z-10 bg-gradient-to-br from-slate-950 via-slate-950/90 to-transparent"></div>
+  const selectClass = "flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
-      <Card className="relative z-20 w-full max-w-2xl border-none shadow-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
-        <div className="h-2 w-full bg-blue-600"></div>
-        <CardHeader className="space-y-4 pt-10 pb-8 text-center border-b">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-blue-600/10 flex items-center justify-center mb-2">
-             <GraduationCap className="h-10 w-10 text-blue-600" />
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-2xl border border-border bg-card shadow-sm animate-fade-in">
+        <CardHeader className="space-y-4 pt-8 pb-6 text-center border-b border-border">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
+            <GraduationCap size={24} className="text-primary" strokeWidth={1.75} />
           </div>
-          <div className="space-y-2">
-            <CardTitle className="text-3xl font-black tracking-tighter">Faculty Onboarding</CardTitle>
-            <CardDescription className="text-muted-foreground font-medium text-lg">Initialize your professional academic portal status.</CardDescription>
+          <div className="space-y-1.5">
+            <CardTitle className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+              Faculty registration
+            </CardTitle>
+            <CardDescription className="text-sm leading-relaxed text-muted-foreground text-pretty">
+              Set up your academic portal account. Empowered to excel.
+            </CardDescription>
           </div>
         </CardHeader>
 
-        <CardContent className="p-10">
+        <CardContent className="p-6 md:p-8">
           {!isVerified ? (
-            <div className="space-y-8 animate-in slide-in-from-top-4 duration-500">
-               <div className="text-center space-y-4">
-                  <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 dark:bg-blue-900/20 text-blue-600">
-                     <ShieldCheck className="h-10 w-10" />
-                  </div>
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-black tracking-tight">Staff Identity Verification</h3>
-                    <p className="text-sm text-muted-foreground font-medium max-w-md mx-auto leading-relaxed">
-                      To safeguard institutional integrity, please enter the <span className="text-blue-600 font-bold">9-digit Access PIN</span> issued by the Registrar or IT Department.
-                    </p>
-                  </div>
-               </div>
+            <div className="space-y-6">
+              <div className="text-center space-y-3">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <ShieldCheck size={22} strokeWidth={1.5} />
+                </div>
+                <div className="space-y-1.5">
+                  <h2 className="text-lg font-semibold text-foreground">Staff identity verification</h2>
+                  <p className="text-sm leading-relaxed text-muted-foreground max-w-prose mx-auto text-pretty">
+                    Enter the access PIN issued by the registrar or IT department to continue.
+                  </p>
+                </div>
+              </div>
 
-               <form onSubmit={checkPIN} className="max-w-xs mx-auto space-y-6">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">Institutional security pin</Label>
-                    <Input 
-                      type="password" 
-                      placeholder="•••••••••" 
-                      className={`text-center h-16 text-2xl font-black tracking-[0.5em] rounded-2xl focus-visible:ring-blue-600 ${pinError ? 'border-destructive ring-destructive' : ''}`}
-                      value={accessPIN} 
-                      onChange={e => setAccessPIN(e.target.value)}
-                    />
-                    {pinError && <p className="text-xs font-bold text-destructive text-center mt-2">{pinError}</p>}
-                  </div>
-                  <Button type="submit" className="w-full h-14 bg-blue-600 hover:bg-blue-700 font-black text-lg shadow-xl shadow-blue-600/20 rounded-2xl">
-                     Verify Faculty Status
-                  </Button>
-               </form>
+              <form onSubmit={checkPIN} className="max-w-xs mx-auto space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="accessPIN" className="text-xs font-medium text-muted-foreground">Institutional access PIN</Label>
+                  <Input
+                    id="accessPIN"
+                    type="password"
+                    placeholder="Enter access PIN"
+                    className={`text-center h-11 tracking-widest ${pinError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    value={accessPIN}
+                    onChange={e => setAccessPIN(e.target.value)}
+                  />
+                  {pinError && (
+                    <p className="text-xs text-destructive flex items-start gap-1.5 mt-1">
+                      <AlertCircle size={14} className="shrink-0 mt-0.5" strokeWidth={1.75} />
+                      <span>{pinError}</span>
+                    </p>
+                  )}
+                </div>
+                <Button type="submit" className="w-full h-11 active:translate-y-px">
+                  Verify faculty status
+                </Button>
+              </form>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-               {/* Section 1 */}
-               <div className="space-y-6">
-                  <div className="flex items-center gap-3">
-                     <div className="h-1 w-8 bg-blue-600 rounded-full"></div>
-                     <h3 className="text-sm font-black uppercase tracking-widest text-blue-600">Professional Credentials</h3>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <div className="md:col-span-1 space-y-2">
-                       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Title</Label>
-                       <select 
-                         className="flex h-12 w-full rounded-xl border border-input bg-background px-3 py-2 text-sm font-bold ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                         value={form.title} 
-                         onChange={e => setForm({...form, title: e.target.value})}
-                       >
-                          <option value="Dr.">Dr.</option>
-                          <option value="Prof.">Prof.</option>
-                          <option value="Mr.">Mr.</option>
-                          <option value="Mrs.">Mrs.</option>
-                       </select>
-                    </div>
-                    <div className="md:col-span-3 space-y-2">
-                       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Full Nomenclature (Surname Last)</Label>
-                       <div className="relative">
-                          <User className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                          <Input type="text" placeholder="Sarah Jenkins" className="pl-12 h-12 rounded-xl focus-visible:ring-blue-600" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
-                       </div>
-                    </div>
-                  </div>
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Section 1 */}
+              <section className="space-y-5">
+                <h2 className="text-lg font-semibold text-foreground">Professional credentials</h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                       <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Faculty Staff ID</Label>
-                       <div className="relative">
-                          <Fingerprint className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                          <Input type="text" placeholder="LEC/2024/102" className="pl-12 h-12 rounded-xl focus-visible:ring-blue-600" value={form.staffId} onChange={e => setForm({...form, staffId: e.target.value})} required />
-                       </div>
-                    </div>
-                     <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Official Institutional Email</Label>
-                        <div className="relative">
-                           <Mail className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                           <Input
-                             type="email"
-                             placeholder="firstname.surname@mtu.edu.ng"
-                             className={`pl-12 h-12 rounded-xl focus-visible:ring-blue-600 ${emailError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                             value={form.email}
-                             onChange={handleEmailChange}
-                             required
-                           />
-                        </div>
-                        {emailError && (
-                          <p className="text-[11px] font-bold text-red-500 flex items-start gap-1.5 mt-1 ml-1">
-                            <span className="shrink-0 mt-0.5">⚠</span>
-                            {emailError}
-                          </p>
-                        )}
-                     </div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+                  <div className="md:col-span-1 space-y-1.5">
+                    <Label htmlFor="title" className="text-xs font-medium text-muted-foreground">Title</Label>
+                    <select
+                      id="title"
+                      className={selectClass}
+                      value={form.title}
+                      onChange={e => setForm({...form, title: e.target.value})}
+                    >
+                      <option value="Dr.">Dr.</option>
+                      <option value="Prof.">Prof.</option>
+                      <option value="Mr.">Mr.</option>
+                      <option value="Mrs.">Mrs.</option>
+                    </select>
                   </div>
-               </div>
-
-               {/* Section 2 */}
-               <div className="space-y-6">
-                  <div className="flex items-center gap-3">
-                     <div className="h-1 w-8 bg-blue-600 rounded-full"></div>
-                     <h3 className="text-sm font-black uppercase tracking-widest text-blue-600">Institutional Placement</h3>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Institutional College / Faculty</Label>
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label htmlFor="name" className="text-xs font-medium text-muted-foreground">Full name (surname last)</Label>
                     <div className="relative">
-                       <Building2 className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground z-10" />
-                       <select 
-                         className="flex h-12 w-full rounded-xl border border-input bg-background pl-12 pr-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                         value={form.college} 
-                         onChange={e => setForm({...form, college: e.target.value, department: ''})} 
-                         required
-                       >
-                          <option value="">Select Primary College</option>
-                          {structure.colleges.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                       </select>
+                      <User size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input id="name" type="text" placeholder="Sarah Jenkins" className="pl-9 h-11" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
                     </div>
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Assigned Program of Study</Label>
-                      <div className="relative">
-                        <GraduationCap className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground z-10" />
-                        <select 
-                          className="flex h-12 w-full rounded-xl border border-input bg-background pl-12 pr-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-30"
-                          value={form.program} 
-                          onChange={e => setForm({...form, program: e.target.value})} 
-                          disabled={!form.college} 
-                          required
-                        >
-                           <option value="">Select Primary Program</option>
-                           {selectedCollege?.programs.map(p => <option key={p} value={p}>{p}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Institutional Academic Rank</Label>
-                      <div className="relative">
-                         <Briefcase className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground z-10" />
-                         <select 
-                           className="flex h-12 w-full rounded-xl border border-input bg-background pl-12 pr-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2"
-                           value={form.rank} 
-                           onChange={e => setForm({...form, rank: e.target.value})}
-                         >
-                            <option value="Graduate Assistant">Graduate Assistant</option>
-                            <option value="Assistant Lecturer">Assistant Lecturer</option>
-                            <option value="Lecturer II">Lecturer II</option>
-                            <option value="Lecturer I">Lecturer I</option>
-                            <option value="Senior Lecturer">Senior Lecturer</option>
-                            <option value="Associate Professor">Associate Professor</option>
-                            <option value="Professor">Professor</option>
-                         </select>
-                      </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="staffId" className="text-xs font-medium text-muted-foreground">Faculty staff ID</Label>
+                    <div className="relative">
+                      <Fingerprint size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input id="staffId" type="text" placeholder="LEC/2024/102" className="pl-9 h-11" value={form.staffId} onChange={e => setForm({...form, staffId: e.target.value})} required />
                     </div>
                   </div>
-               </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">Official institutional email</Label>
+                    <div className="relative">
+                      <Mail size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="firstname.surname@mtu.edu.ng"
+                        className={`pl-9 h-11 ${emailError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                        value={form.email}
+                        onChange={handleEmailChange}
+                        required
+                      />
+                    </div>
+                    {emailError && (
+                      <p className="text-xs text-destructive flex items-start gap-1.5 mt-1">
+                        <AlertCircle size={14} className="shrink-0 mt-0.5" strokeWidth={1.75} />
+                        <span>{emailError}</span>
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </section>
 
-               <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border-l-4 border-blue-600 text-[10px] font-bold text-muted-foreground flex gap-3">
-                  <div className="h-4 w-4 shrink-0 mt-0.5"><Lock className="h-full w-full" /></div>
-                  <p>SYSTEM PROTOCOL: Initial portal access password will be set to your SURNAME (all lowercase). Please update immediately upon first synchronization.</p>
-               </div>
+              {/* Section 2 */}
+              <section className="space-y-5">
+                <h2 className="text-lg font-semibold text-foreground">Institutional placement</h2>
 
-               <Button type="submit" className="w-full h-16 bg-blue-600 hover:bg-blue-700 font-black text-xl shadow-2xl shadow-blue-600/30 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.98]" disabled={loading}>
-                  {loading ? "Synchronizing Records..." : "Initialize Faculty Access"} <ArrowRight className="ml-2 h-5 w-5" />
-               </Button>
+                <div className="space-y-1.5">
+                  <Label htmlFor="college" className="text-xs font-medium text-muted-foreground">College / faculty</Label>
+                  <div className="relative">
+                    <Building2 size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
+                    <select
+                      id="college"
+                      className={`${selectClass} pl-9`}
+                      value={form.college}
+                      onChange={e => setForm({...form, college: e.target.value, department: ''})}
+                      required
+                    >
+                      <option value="">Select primary college</option>
+                      {structure.colleges.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="program" className="text-xs font-medium text-muted-foreground">Assigned program of study</Label>
+                    <div className="relative">
+                      <GraduationCap size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
+                      <select
+                        id="program"
+                        className={`${selectClass} pl-9`}
+                        value={form.program}
+                        onChange={e => setForm({...form, program: e.target.value})}
+                        disabled={!form.college}
+                        required
+                      >
+                        <option value="">Select primary program</option>
+                        {selectedCollege?.programs.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="rank" className="text-xs font-medium text-muted-foreground">Academic rank</Label>
+                    <div className="relative">
+                      <Briefcase size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
+                      <select
+                        id="rank"
+                        className={`${selectClass} pl-9`}
+                        value={form.rank}
+                        onChange={e => setForm({...form, rank: e.target.value})}
+                      >
+                        <option value="Graduate Assistant">Graduate Assistant</option>
+                        <option value="Assistant Lecturer">Assistant Lecturer</option>
+                        <option value="Lecturer II">Lecturer II</option>
+                        <option value="Lecturer I">Lecturer I</option>
+                        <option value="Senior Lecturer">Senior Lecturer</option>
+                        <option value="Associate Professor">Associate Professor</option>
+                        <option value="Professor">Professor</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex gap-3 rounded-md border border-border bg-muted/50 p-4 text-xs leading-relaxed text-muted-foreground">
+                <Lock size={16} className="shrink-0 mt-0.5 text-muted-foreground" strokeWidth={1.5} />
+                <p>Your initial portal password is set to your surname in lowercase. Update it immediately after your first sign-in.</p>
+              </div>
+
+              <Button type="submit" className="w-full h-11 active:translate-y-px" disabled={loading}>
+                {loading ? "Creating your account…" : "Create faculty account"}
+                <ArrowRight size={16} />
+              </Button>
             </form>
           )}
         </CardContent>
 
-        <CardFooter className="p-10 pt-0 flex flex-col gap-4">
-           <div className="flex items-center gap-4 w-full">
-              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-800"></div>
-              <span className="text-[10px] font-black uppercase text-muted-foreground tracking-[0.2em]">Institutional Links</span>
-              <div className="h-[1px] flex-1 bg-slate-200 dark:bg-slate-800"></div>
-           </div>
-           <div className="flex flex-col sm:flex-row justify-between items-center w-full gap-4">
-              <p className="text-xs font-bold text-muted-foreground">
-                Seeking student registration? <Link href="/signup" className="text-blue-600 hover:underline underline-offset-4">Academic Admissions</Link>
-              </p>
-              <Link href="/login" className="flex items-center text-xs font-black text-blue-600 uppercase tracking-widest hover:underline underline-offset-4">
-                 Sign In to Portal <UserPlus className="ml-1 h-3 w-3" />
-              </Link>
-           </div>
+        <CardFooter className="px-6 md:px-8 pb-8 pt-0 flex flex-col sm:flex-row justify-between items-center gap-3 border-t border-border pt-6">
+          <p className="text-sm text-muted-foreground">
+            Seeking student registration?{' '}
+            <Link href="/signup" className="text-primary underline-offset-4 hover:underline">Student admissions</Link>
+          </p>
+          <Link href="/login" className="text-sm text-primary underline-offset-4 hover:underline">
+            Sign in to portal
+          </Link>
         </CardFooter>
       </Card>
-      
-      {/* Decorative ornaments */}
-      <div className="absolute top-0 right-0 w-1/3 h-full bg-blue-600/5 -skew-x-12 transform origin-top-right"></div>
-      <div className="absolute top-20 left-10 w-48 h-48 bg-blue-600/10 rounded-full blur-[100px] animate-pulse"></div>
-      <div className="absolute bottom-20 right-10 w-64 h-64 bg-teal-600/10 rounded-full blur-[120px] animate-pulse duration-1000"></div>
-    </div>
+    </main>
   );
 }

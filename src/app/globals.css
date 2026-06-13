@@ -1,205 +1,157 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
- 
+
+/*
+  Mountain Top University — Portal tokens
+  Modern Institutional · MTU forest green + navy · refined light + dark
+  Dark mode is driven by the `.dark` class (next-themes attribute="class").
+*/
+
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
- 
+    --background: 210 24% 98%;
+    --foreground: 218 33% 14%;
+
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
- 
+    --card-foreground: 218 33% 14%;
+
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
- 
-    --primary: 174 100% 24%;
-    --primary-foreground: 210 40% 98%;
- 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
- 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
- 
-    --accent: 174 63% 40%;
-    --accent-foreground: 222.2 47.4% 11.2%;
- 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
- 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 174 100% 24%;
- 
-    --radius: 0.75rem;
+    --popover-foreground: 218 33% 14%;
+
+    /* MTU forest green — deep, calm, desaturated for large areas */
+    --primary: 158 54% 25%;
+    --primary-foreground: 150 40% 97%;
+
+    --secondary: 215 28% 95%;
+    --secondary-foreground: 218 30% 22%;
+
+    --muted: 215 26% 95%;
+    --muted-foreground: 215 15% 42%;
+
+    --accent: 215 26% 93%;
+    --accent-foreground: 218 30% 20%;
+
+    --destructive: 0 66% 46%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 22% 88%;
+    --input: 215 22% 86%;
+    --ring: 158 54% 30%;
+
+    --radius: 0.625rem;
+
+    /* ── Brand accents (sparing) ── */
+    --brand-green: 158 54% 25%;
+    --brand-green-soft: 158 42% 93%;
+    --navy: 218 44% 18%;
+    --navy-soft: 218 38% 95%;
+    --gold: 38 66% 44%;
+    --gold-soft: 40 72% 92%;
+    --brand-purple: 262 36% 46%;
+    --brand-purple-soft: 262 44% 95%;
+
+    /* ── Functional status ── */
+    --success: 152 54% 30%;
+    --success-foreground: 0 0% 100%;
+    --warning: 33 82% 42%;
+    --warning-foreground: 0 0% 100%;
+    --info: 214 58% 40%;
+    --info-foreground: 0 0% 100%;
   }
- 
+
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
- 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
- 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
- 
-    --primary: 174 63% 40%;
-    --primary-foreground: 222.2 47.4% 11.2%;
- 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
- 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
- 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
- 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
- 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --background: 220 28% 9%;
+    --foreground: 210 22% 92%;
+
+    --card: 220 24% 12%;
+    --card-foreground: 210 22% 92%;
+
+    --popover: 220 24% 12%;
+    --popover-foreground: 210 22% 92%;
+
+    /* Lifted green for contrast on dark slate */
+    --primary: 158 48% 45%;
+    --primary-foreground: 158 40% 8%;
+
+    --secondary: 218 18% 18%;
+    --secondary-foreground: 210 22% 90%;
+
+    --muted: 218 16% 18%;
+    --muted-foreground: 215 16% 62%;
+
+    --accent: 218 16% 21%;
+    --accent-foreground: 210 22% 92%;
+
+    --destructive: 0 58% 47%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 218 16% 22%;
+    --input: 218 16% 24%;
+    --ring: 158 48% 50%;
+
+    --brand-green: 158 48% 45%;
+    --brand-green-soft: 158 30% 16%;
+    --navy: 214 40% 70%;
+    --navy-soft: 218 24% 16%;
+    --gold: 40 70% 56%;
+    --gold-soft: 40 30% 16%;
+    --brand-purple: 262 44% 66%;
+    --brand-purple-soft: 262 24% 18%;
+
+    --success: 152 46% 44%;
+    --success-foreground: 0 0% 100%;
+    --warning: 36 78% 52%;
+    --warning-foreground: 220 28% 9%;
+    --info: 214 60% 60%;
+    --info-foreground: 220 28% 9%;
   }
 }
- 
+
 @layer base {
   * {
     @apply border-border;
   }
+  html {
+    scroll-behavior: smooth;
+  }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings: "cv02", "cv03", "cv04", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  /* Headings default to the institutional serif; opt out with `font-sans`. */
+  h1, h2, h3, h4 {
+    @apply font-serif tracking-tight;
+    text-wrap: balance;
+  }
+  /* Tabular figures for any explicitly data-flagged element. */
+  .tabular-nums, [data-numeric] {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-/* Custom Glass Effects Preserved */
-.glass-panel {
-  @apply bg-white/70 dark:bg-slate-950/70 border-white/20 dark:border-white/10 shadow-lg backdrop-blur-xl transition-all duration-300;
+/* ── Calm, on-brand scrollbars ── */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--muted-foreground) / 0.5);
+    background-clip: content-box;
+  }
+  ::selection {
+    background-color: hsl(var(--primary) / 0.18);
+  }
 }
-
-.glass-panel:hover {
-  @apply border-primary/20 bg-white/80 dark:bg-slate-950/80;
-}
-
-.dash-layout-grid {
-  @apply grid grid-cols-12 gap-6;
-}
-
-/* ── Dashboard Layout ──────────────────────────────────────────────────── */
-.dashboard-wrapper {
-  position: relative;
-  min-height: 100vh;
-  background-size: 0 0 !important;
-}
-
-.dashboard-wrapper::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  background-image: inherit;
-  background-size: cover;
-  background-position: center;
-  pointer-events: none;
-}
-
-/* Single CSS-only overlay — no JS, no flash, no blink.
-   next-themes sets the .dark class on <html> synchronously before paint. */
-.global-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  background: rgba(243, 244, 246, 0.85); /* light mode */
-  pointer-events: none;
-}
-.dark .global-overlay {
-  background: rgba(17, 24, 39, 0.92); /* dark mode */
-}
-
-.dashboard-layout-content {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  min-height: 100vh;
-}
-
-.dashboard-main {
-  flex: 1;
-  padding: 1.5rem 2rem;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-}
-
-.dashboard-content {
-  flex: 1;
-  animation: dashFadeIn 0.25s ease-out;
-}
-
-@keyframes dashFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0);   }
-}
-
-/* ── Lecturer Topbar ───────────────────────────────────────────────────── */
-.lecturer-topbar {
-  padding: 0.85rem 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.topbar-role-badge {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: hsl(var(--primary));
-  letter-spacing: 0.3px;
-}
-
-/* ── Audit Banner ──────────────────────────────────────────────────────── */
-.audit-banner {
-  position: sticky;
-  top: 0;
-  z-index: 1000;
-  background: #ef4444;
-  color: white;
-  padding: 0.75rem 2rem;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-}
-.audit-info {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-}
-.pulse-icon {
-  width: 10px;
-  height: 10px;
-  background: white;
-  border-radius: 50%;
-  animation: pulse 1s infinite;
-}
-@keyframes pulse {
-  0%, 100% { transform: scale(1);   opacity: 1;   }
-  50%       { transform: scale(1.5); opacity: 0.5; }
-}
-.exit-audit-btn {
-  background: white;
-  color: #ef4444;
-  border: none;
-  padding: 0.4rem 1rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: transform 0.2s;
-}
-.exit-audit-btn:hover { transform: scale(1.05); }
-

@@ -3,18 +3,20 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStore } from '@/store/useStore';
-import { 
-  Mic, MicOff, Video, VideoOff, PhoneOff, ScreenShare, 
+import {
+  Mic, MicOff, Video, VideoOff, PhoneOff, ScreenShare,
   MessageSquare, Users, Settings, Hand, Smile, Send, X,
   Maximize2, Volume2, Shield, MoreVertical
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 export default function VirtualClassroom() {
   const router = useRouter();
   const { id } = useParams();
   const { user, liveSessions, endLiveSession } = useStore();
   const currentSession = liveSessions.find(s => s.id === id);
-  
+
   const [isMuted, setIsMuted] = useState(false);
   const [isCamOff, setIsCamOff] = useState(false);
   const [showChat, setShowChat] = useState(true);
@@ -104,344 +106,218 @@ export default function VirtualClassroom() {
 
   if (!currentSession && user?.role !== 'admin') {
     return (
-      <div className="error-screen">
-        <h2>Session Not Found</h2>
-        <p>This live class might have ended or the link is invalid.</p>
-        <button className="btn btn-primary" onClick={() => router.push('/')}>Return Home</button>
+      <div className="dark fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card">
+          <Video size={22} strokeWidth={1.5} className="text-muted-foreground" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="font-serif text-2xl font-semibold tracking-tight text-balance">Session not found</h2>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
+            This live class might have ended, or the link is no longer valid.
+          </p>
+        </div>
+        <Button onClick={() => router.push('/')}>Return home</Button>
       </div>
     );
   }
 
   return (
-    <div className="classroom-wrapper">
-      {/* Top Bar */}
-      <div className="classroom-header">
-        <div className="session-info">
-          <div className="live-pill">LIVE</div>
-          <div className="divider"></div>
+    <div className="dark fixed inset-0 z-[9999] flex flex-col bg-background text-foreground animate-fade-in">
+      {/* Top bar */}
+      <header className="flex h-[70px] items-center justify-between border-b border-border px-6">
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            Live
+          </span>
+          <span className="h-7 w-px bg-border" />
           <div>
-            <h3>{currentSession?.title || "Virtual Lecture Session"}</h3>
-            <p>{currentSession?.lecturerName} · PHY104 Fundamentals</p>
+            <h3 className="font-sans text-sm font-semibold tracking-tight text-foreground">
+              {currentSession?.title || "Virtual lecture session"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {currentSession?.lecturerName} · PHY104 Fundamentals
+            </p>
           </div>
         </div>
-        <div className="header-controls">
-          <div className="recording-status">
-            <span className="dot"></span> REC 01:24:05
-          </div>
-          <button className="icon-btn"><Settings size={18} /></button>
-          <button className="icon-btn"><Shield size={18} /></button>
+        <div className="flex items-center gap-2">
+          <span className="mr-3 inline-flex items-center gap-2 text-xs font-medium tabular-nums text-muted-foreground">
+            <span className="h-1.5 w-1.5 rounded-full bg-destructive" />
+            Rec 01:24:05
+          </span>
+          <Button variant="ghost" size="icon" aria-label="Settings">
+            <Settings size={18} />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Security">
+            <Shield size={18} />
+          </Button>
         </div>
-      </div>
+      </header>
 
-      <div className="main-stage">
-        {/* Video Grid */}
-        <div className={`video-grid ${showChat ? 'with-chat' : ''}`}>
-          {/* Main Speaker (Lecturer) */}
-          <div className="video-card main-speaker">
-            <div className="video-overlay">
-              <span>{user?.role === 'lecturer' ? `${user?.title} ${user?.name} (Host)` : (currentSession?.lecturerName || "Lecturer")}</span>
+      <div className="flex flex-1 gap-4 overflow-hidden p-4">
+        {/* Video grid */}
+        <div className="grid flex-1 gap-4 [grid-template-columns:1fr_200px]">
+          {/* Main speaker (lecturer) */}
+          <div className="relative flex items-center justify-center overflow-hidden rounded-xl border-2 border-primary bg-card">
+            <div className="absolute bottom-3 left-3 z-10 rounded-md bg-background/80 px-2.5 py-1 text-xs font-medium text-foreground">
+              {user?.role === 'lecturer' ? `${user?.title} ${user?.name} (Host)` : (currentSession?.lecturerName || "Lecturer")}
             </div>
-            
+
             {(user?.role === 'lecturer' && !isCamOff) ? (
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
                 muted={true}
-                className="live-video-feed"
+                className="h-full w-full -scale-x-100 object-cover"
               />
             ) : (
-              <div className="video-placeholder lecturer-view">
-                <div className="avatar-lg">
+              <div className="flex h-full w-full flex-col items-center justify-center gap-6 bg-muted">
+                <div className="flex h-28 w-28 items-center justify-center rounded-full bg-primary text-4xl font-semibold text-primary-foreground">
                   {(user?.role === 'lecturer' ? user.avatar : (currentSession?.lecturerName?.charAt(0) || 'L'))}
                 </div>
-                <p>{isCamOff ? 'Camera is Off' : 'Host is presenting...'}</p>
+                <p className="text-sm text-muted-foreground">{isCamOff ? 'Camera is off' : 'Host is presenting'}</p>
               </div>
             )}
-            
-            <div className="speaker-badges">
-              <div className="badge">{isMuted ? <MicOff size={14} /> : <Mic size={14} />}</div>
+
+            <div className="absolute right-3 top-3 z-10">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-background/80 text-foreground">
+                {isMuted ? <MicOff size={14} /> : <Mic size={14} />}
+              </span>
             </div>
           </div>
 
-          {/* Participants Grid */}
-          <div className="participants-sidebar">
+          {/* Participants column */}
+          <div className="flex flex-col gap-3 overflow-y-auto">
             {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="video-card mini">
-                <div className="video-placeholder mini-v">
-                  <div className="avatar-sm">S{i}</div>
+              <div key={i} className="relative h-[140px] overflow-hidden rounded-xl border border-border bg-card">
+                <div className="flex h-full items-center justify-center bg-muted">
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">S{i}</span>
                 </div>
-                <div className="mini-name">Student {i}</div>
+                <div className="absolute bottom-2 left-2 text-xs text-muted-foreground">Student {i}</div>
               </div>
             ))}
-            <div className="video-card mini self">
-               <div className={`video-placeholder mini-v ${isCamOff ? 'cam-off' : ''}`}>
-                  {isCamOff ? (
-                    <div className="avatar-sm">{user?.avatar}</div>
+            <div className="relative h-[140px] overflow-hidden rounded-xl border-2 border-primary bg-card">
+              <div className="flex h-full items-center justify-center bg-muted">
+                {isCamOff ? (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">{user?.avatar}</span>
+                ) : (
+                  user?.role === 'student' ? (
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted={true}
+                      className="h-full w-full rounded-xl object-cover"
+                    />
                   ) : (
-                    user?.role === 'student' ? (
-                      <video 
-                        ref={videoRef} 
-                        autoPlay 
-                        playsInline 
-                        muted={true}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '16px' }}
-                      />
-                    ) : (
-                      <div className="avatar-sm text-xs">Self View</div>
-                    )
-                  )}
-               </div>
-               <div className="mini-name">You {isMuted && <MicOff size={10} color="#ff4d4d" />}</div>
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-xs font-medium text-secondary-foreground">You</span>
+                  )
+                )}
+              </div>
+              <div className="absolute bottom-2 left-2 flex items-center gap-1 text-xs text-muted-foreground">
+                You {isMuted && <MicOff size={10} className="text-destructive" />}
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Chat Sidebar */}
+        {/* Chat sidebar */}
         {showChat && (
-          <div className="chat-panel glass-panel">
-            <div className="panel-header">
-              <h3>In-call Messages</h3>
-              <button className="close-chat" onClick={() => setShowChat(false)}><X size={18} /></button>
-            </div>
-            <div className="chat-content">
+          <aside className="flex w-[350px] flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <header className="flex items-center justify-between border-b border-border px-5 py-4">
+              <h3 className="font-sans text-sm font-semibold text-foreground">In-call messages</h3>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowChat(false)} aria-label="Close chat">
+                <X size={18} />
+              </Button>
+            </header>
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
               {chatLog.map((c, i) => (
-                <div key={i} className="chat-msg">
-                  <span className="sender">{c.user}</span>
-                  <p className="txt">{c.text}</p>
+                <div key={i} className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-primary">{c.user}</span>
+                  <p className="rounded-md rounded-tl-none bg-muted px-3 py-2 text-sm leading-relaxed text-muted-foreground">{c.text}</p>
                 </div>
               ))}
             </div>
-            <form className="chat-entry" onSubmit={sendMessage}>
-              <input 
-                type="text" 
-                placeholder="Send a message to everyone" 
+            <form className="flex gap-2 border-t border-border p-3" onSubmit={sendMessage}>
+              <Input
+                type="text"
+                placeholder="Send a message to everyone"
                 value={message}
                 onChange={e => setMessage(e.target.value)}
+                className="h-10"
               />
-              <button type="submit"><Send size={16} /></button>
+              <Button type="submit" size="icon" className="h-10 w-10 shrink-0" aria-label="Send message">
+                <Send size={16} />
+              </Button>
             </form>
-          </div>
+          </aside>
         )}
       </div>
 
-      {/* Control Bar */}
-      <div className="classroom-footer">
-        <div className="left-tools">
-          <div className="time-display" id="live-clock">{liveClock}</div>
-          <div className="divider"></div>
-          <button className="tool-btn" onClick={() => setShowChat(!showChat)}>
+      {/* Control bar */}
+      <footer className="flex h-[100px] items-center justify-between border-t border-border px-6">
+        <div className="flex w-[250px] items-center gap-4">
+          <span className="text-sm font-medium tabular-nums text-muted-foreground" id="live-clock">{liveClock}</span>
+          <span className="h-7 w-px bg-border" />
+          <Button variant="ghost" size="icon" className="relative" onClick={() => setShowChat(!showChat)} aria-label="Toggle chat">
             <MessageSquare size={20} />
-            {chatLog.length > 0 && <span className="notif-dot"></span>}
-          </button>
-          <button className="tool-btn"><Users size={20} /></button>
+            {chatLog.length > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-primary" />}
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Participants">
+            <Users size={20} />
+          </Button>
         </div>
 
-        <div className="center-actions">
-          <button className={`action-circle ${isMuted ? 'off' : ''}`} onClick={toggleMic}>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleMic}
+            aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+            className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-px ${
+              isMuted ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-secondary text-secondary-foreground hover:bg-accent'
+            }`}
+          >
             {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
           </button>
-          <button className={`action-circle ${isCamOff ? 'off' : ''}`} onClick={toggleCam}>
+          <button
+            onClick={toggleCam}
+            aria-label={isCamOff ? 'Turn camera on' : 'Turn camera off'}
+            className={`flex h-12 w-12 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-px ${
+              isCamOff ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : 'bg-secondary text-secondary-foreground hover:bg-accent'
+            }`}
+          >
             {isCamOff ? <VideoOff size={22} /> : <Video size={22} />}
           </button>
-          <button className="action-circle secondary"><Hand size={22} /></button>
-          <button className="action-circle secondary"><ScreenShare size={22} /></button>
-          <button className="action-circle secondary"><Smile size={22} /></button>
-          <button className="action-circle hang-up" onClick={handleLeave}>
+          <button aria-label="Raise hand" className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-px">
+            <Hand size={22} />
+          </button>
+          <button aria-label="Share screen" className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-px">
+            <ScreenShare size={22} />
+          </button>
+          <button aria-label="Reactions" className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-accent-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-px">
+            <Smile size={22} />
+          </button>
+          <button
+            onClick={handleLeave}
+            aria-label="Leave call"
+            className="ml-3 flex h-12 w-16 items-center justify-center rounded-xl bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-px"
+          >
             <PhoneOff size={22} />
           </button>
         </div>
 
-        <div className="right-tools">
-           <button className="tool-btn"><Volume2 size={20} /></button>
-           <button className="tool-btn"><Maximize2 size={20} /></button>
-           <button className="tool-btn"><MoreVertical size={20} /></button>
+        <div className="flex w-[250px] items-center justify-end gap-2">
+          <Button variant="ghost" size="icon" aria-label="Audio settings">
+            <Volume2 size={20} />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="Full screen">
+            <Maximize2 size={20} />
+          </Button>
+          <Button variant="ghost" size="icon" aria-label="More options">
+            <MoreVertical size={20} />
+          </Button>
         </div>
-      </div>
-
-      <style jsx>{`
-        .classroom-wrapper {
-          position: fixed;
-          inset: 0;
-          background: #0a0a0b;
-          color: white;
-          display: flex;
-          flex-direction: column;
-          z-index: 9999;
-          font-family: 'Inter', sans-serif;
-        }
-
-        .classroom-header {
-          height: 70px;
-          padding: 0 2rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: rgba(0,0,0,0.3);
-        }
-
-        .session-info { display: flex; align-items: center; gap: 1.5rem; }
-        .live-pill {
-          background: #ef4444;
-          padding: 0.2rem 0.6rem;
-          border-radius: 4px;
-          font-size: 0.7rem;
-          font-weight: 800;
-          letter-spacing: 1px;
-        }
-        .divider { width: 1px; height: 30px; background: rgba(255,255,255,0.1); }
-        .session-info h3 { font-size: 1rem; margin-bottom: 0.2rem; }
-        .session-info p { font-size: 0.75rem; opacity: 0.6; }
-
-        .recording-status {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: #ef4444;
-          margin-right: 1.5rem;
-        }
-        .recording-status .dot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
-
-        .header-controls { display: flex; align-items: center; gap: 0.5rem; }
-        .icon-btn { background: transparent; border: none; color: white; opacity: 0.6; cursor: pointer; padding: 0.5rem; border-radius: 8px; transition: 0.2s; }
-        .icon-btn:hover { background: rgba(255,255,255,0.1); opacity: 1; }
-
-        .main-stage {
-          flex: 1;
-          display: flex;
-          padding: 1rem;
-          gap: 1rem;
-          overflow: hidden;
-        }
-
-        .video-grid {
-          flex: 1;
-          display: grid;
-          grid-template-columns: 1fr 200px;
-          gap: 1rem;
-          transition: all 0.3s ease;
-        }
-
-        .video-card {
-          background: #1c1c1e;
-          border-radius: 16px;
-          position: relative;
-          overflow: hidden;
-          border: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .main-speaker { height: 100%; width: 100%; border: 3px solid var(--primary); background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .live-video-feed { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        .self { border: 2px solid #3b82f6; }
-        .cam-off { background: #000; }
-
-        .video-placeholder {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: #1c1c1e;
-          gap: 1.5rem;
-        }
-        .lecturer-view { background: linear-gradient(45deg, #1c1c1e, #2c2c2e); }
-
-        .avatar-lg {
-          width: 120px;
-          height: 120px;
-          border-radius: 50%;
-          background: var(--primary);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 3rem;
-          font-weight: 700;
-          box-shadow: 0 0 40px rgba(15, 82, 186, 0.4);
-        }
-
-        .participants-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          overflow-y: auto;
-        }
-
-        .mini { height: 140px; }
-        .avatar-sm { width: 40px; height: 40px; border-radius: 50%; background: #3a3a3c; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; }
-        .mini-v { background: #2c2c2e; min-height: 140px; }
-        .mini-name {
-          position: absolute;
-          bottom: 0.5rem;
-          left: 0.5rem;
-          font-size: 0.7rem;
-          opacity: 0.8;
-          display: flex;
-          align-items: center;
-          gap: 0.3rem;
-        }
-
-        .self { border: 1px solid #3b82f6; }
-        .cam-off { background: #000; }
-
-        .chat-panel {
-          width: 350px;
-          display: flex;
-          flex-direction: column;
-          background: rgba(28, 28, 30, 0.8);
-          border-radius: 16px;
-        }
-
-        .panel-header { padding: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
-        .panel-header h3 { font-size: 0.9rem; font-weight: 600; }
-        .chat-content { flex: 1; padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
-        .chat-msg { display: flex; flex-direction: column; gap: 0.25rem; }
-        .sender { font-size: 0.75rem; font-weight: 700; color: var(--primary); }
-        .txt { font-size: 0.85rem; opacity: 0.8; background: rgba(255,255,255,0.05); padding: 0.6rem; border-radius: 10px; border-top-left-radius: 0; }
-
-        .chat-entry { padding: 1rem; display: flex; gap: 0.5rem; }
-        .chat-entry input { flex: 1; background: #2c2c2e; border: none; border-radius: 10px; padding: 0.6rem 1rem; color: white; font-size: 0.85rem; }
-        .chat-entry input:focus { outline: 2px solid var(--primary); }
-        .chat-entry button { width: 36px; height: 36px; border-radius: 10px; background: var(--primary); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-
-        .classroom-footer {
-          height: 100px;
-          padding: 0 2rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: rgba(0,0,0,0.5);
-        }
-
-        .left-tools, .right-tools { display: flex; align-items: center; gap: 1.25rem; width: 250px; }
-        .time-display { font-size: 0.9rem; font-weight: 500; opacity: 0.8; }
-        .tool-btn { position: relative; background: transparent; border: none; color: white; opacity: 0.7; cursor: pointer; }
-        .notif-dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; border: 2px solid #000; }
-
-        .center-actions { display: flex; align-items: center; gap: 1rem; }
-        .action-circle {
-          width: 52px;
-          height: 52px;
-          border-radius: 50%;
-          background: #3a3a3c;
-          border: none;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .action-circle:hover { transform: scale(1.05); background: #4a4a4c; }
-        .action-circle.off { background: #ef4444; color: white; }
-        .action-circle.secondary { background: rgba(255,255,255,0.05); }
-        .action-circle.hang-up { background: #ef4444; margin-left: 1rem; width: 64px; border-radius: 20px; }
-        .action-circle.hang-up:hover { background: #dc2626; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
-
-        .error-screen { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; color: white; gap: 1rem; }
-      `}</style>
+      </footer>
     </div>
   );
 }

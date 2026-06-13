@@ -3,6 +3,7 @@
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
 import { Archive, ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 export default function PastQuestions() {
   const { user, courses, pastQuestions } = useStore();
@@ -18,63 +19,113 @@ export default function PastQuestions() {
   const toggle = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
 
   return (
-    <div className="page-container animate-fade-in">
-      <div className="page-header">
-        <div>
-          <h2>Past Questions</h2>
-          <p>Review previous exam and test questions to prepare for your assessments.</p>
-        </div>
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      <header>
+        <h2 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground">Past questions</h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground max-w-prose text-pretty">
+          Review previous exam and test questions to prepare for your assessments.
+        </p>
+      </header>
 
       {/* Filter */}
-      <div className="filter-bar glass-panel">
-        <BookOpen size={15} />
-        <span>Filter by Course:</span>
-        <div className="filter-pills">
-          <button className={`pill ${filterCourse === 'all' ? 'active' : ''}`} onClick={() => setFilterCourse('all')}>All Level Courses</button>
-          {myCourses.map(c => (
-            <button key={c.id} className={`pill ${filterCourse === String(c.id) ? 'active' : ''}`} onClick={() => setFilterCourse(String(c.id))} style={filterCourse === String(c.id) ? { background: c.color, borderColor: c.color } : {}}>
-              {c.code}
-            </button>
-          ))}
+      <section className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-4 text-card-foreground">
+        <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+          <BookOpen size={16} strokeWidth={1.5} />
+          Filter by course
+        </span>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setFilterCourse('all')}
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+              filterCourse === 'all'
+                ? 'border-transparent bg-primary text-primary-foreground'
+                : 'border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-foreground'
+            }`}
+          >
+            All level courses
+          </button>
+          {myCourses.map(c => {
+            const active = filterCourse === String(c.id);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setFilterCourse(String(c.id))}
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                  active
+                    ? 'border-transparent bg-primary text-primary-foreground'
+                    : 'border-border bg-transparent text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                }`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: c.color }} aria-hidden="true" />
+                {c.code}
+              </button>
+            );
+          })}
         </div>
-      </div>
+      </section>
 
       {/* Past Questions */}
-      <div className="pq-list">
+      <section className="space-y-3">
         {filtered.length === 0 ? (
-          <div className="empty-full glass-panel"><Archive size={40} /><p>No past questions available for this course yet.</p></div>
+          <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-16 text-center">
+            <Archive size={40} strokeWidth={1.5} className="text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No past questions available for this course yet.</p>
+          </div>
         ) : (
           filtered.map(pq => {
             const course = courses.find(c => c.id === pq.courseId);
             const isOpen = expanded[pq.id];
             return (
-              <div key={pq.id} className="pq-card glass-panel">
-                <div className="pq-header" onClick={() => toggle(pq.id)}>
-                  <div className="pq-header-left">
-                    <div className="pq-accent" style={{ background: course?.color }}></div>
-                    <div className="pq-meta">
-                      {course && <span className="course-tag" style={{ background: course.color + '22', color: course.color }}>{course.code} — {course.title}</span>}
-                      <div className="pq-details">
-                        <span className="pq-year">📅 {pq.year}</span>
-                        <span className="pq-semester">{pq.semester} Semester</span>
-                        <span className={`pq-type ${pq.type.toLowerCase()}`}>{pq.type}</span>
-                        <span className="pq-count">{pq.questions.length} question{pq.questions.length !== 1 ? 's' : ''}</span>
+              <div key={pq.id} className="overflow-hidden rounded-xl border border-border bg-card text-card-foreground transition-colors hover:border-primary/40">
+                <button
+                  type="button"
+                  onClick={() => toggle(pq.id)}
+                  className="flex w-full items-center justify-between gap-4 p-5 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  <div className="flex min-w-0 flex-1 items-center gap-4">
+                    <span className="h-12 w-1.5 flex-shrink-0 rounded-full" style={{ background: course?.color }} aria-hidden="true" />
+                    <div className="flex min-w-0 flex-col gap-2">
+                      {course && (
+                        <span className="flex w-fit items-center gap-1.5 text-sm font-semibold text-foreground">
+                          <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ background: course.color }} aria-hidden="true" />
+                          {course.code} — {course.title}
+                        </span>
+                      )}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                        <span className="tabular-nums">{pq.year}</span>
+                        <span>{pq.semester} semester</span>
+                        <Badge
+                          variant="outline"
+                          className={`rounded-md border-transparent ${
+                            pq.type === 'Practical'
+                              ? 'bg-brand-purple-soft text-brand-purple'
+                              : 'bg-info/10 text-info'
+                          }`}
+                        >
+                          {pq.type}
+                        </Badge>
+                        <span className="tabular-nums">
+                          {pq.questions.length} question{pq.questions.length !== 1 ? 's' : ''}
+                        </span>
                       </div>
                     </div>
                   </div>
-                  <button className="expand-btn">
+                  <span className="flex flex-shrink-0 items-center text-muted-foreground" aria-hidden="true">
                     {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </button>
-                </div>
+                  </span>
+                </button>
 
                 {isOpen && (
-                  <div className="pq-body">
-                    <ol className="question-list">
+                  <div className="border-t border-border px-5 pb-5 pt-5">
+                    <ol className="flex flex-col gap-4">
                       {pq.questions.map((q, idx) => (
-                        <li key={idx} className="question-item">
-                          <span className="q-num-badge">{idx + 1}</span>
-                          <p>{q}</p>
+                        <li key={idx} className="flex items-start gap-3">
+                          <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold tabular-nums text-primary-foreground">
+                            {idx + 1}
+                          </span>
+                          <p className="flex-1 text-sm leading-relaxed text-foreground text-pretty">{q}</p>
                         </li>
                       ))}
                     </ol>
@@ -84,45 +135,7 @@ export default function PastQuestions() {
             );
           })
         )}
-      </div>
-
-      <style jsx>{`
-        .page-container { display: flex; flex-direction: column; gap: 1.5rem; }
-        .page-header h2 { font-size: 1.4rem; color: var(--text-main); margin-bottom: 0.2rem; }
-        .page-header p { color: var(--text-muted); font-size: 0.9rem; }
-
-        .filter-bar { padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
-        .filter-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        .pill { padding: 0.3rem 0.85rem; border-radius: 20px; border: 1px solid var(--card-border); background: transparent; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-        .pill.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .pill:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
-
-        .pq-list { display: flex; flex-direction: column; gap: 0.85rem; }
-        .pq-card { overflow: hidden; }
-        .pq-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; cursor: pointer; transition: background 0.2s; }
-        .pq-header:hover { background: rgba(0,0,0,0.02); }
-        [data-theme='dark'] .pq-header:hover { background: rgba(255,255,255,0.02); }
-        .pq-header-left { display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 0; }
-        .pq-accent { width: 5px; height: 50px; border-radius: 3px; flex-shrink: 0; }
-        .pq-meta { display: flex; flex-direction: column; gap: 0.4rem; }
-        .course-tag { font-size: 0.78rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 4px; width: fit-content; }
-        .pq-details { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-        .pq-year, .pq-semester, .pq-count { font-size: 0.8rem; color: var(--text-muted); }
-        .pq-type { font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; }
-        .pq-type.theory { background: rgba(15,82,186,0.1); color: #0f52ba; }
-        .pq-type.practical { background: rgba(130,65,249,0.1); color: #8241f9; }
-        .expand-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; flex-shrink: 0; }
-        .expand-btn:hover { background: var(--nav-active); }
-
-        .pq-body { padding: 0 1.5rem 1.5rem 1.5rem; border-top: 1px solid var(--card-border); padding-top: 1.25rem; animation: slideDown 0.2s ease-out; }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-        .question-list { list-style: none; display: flex; flex-direction: column; gap: 1rem; }
-        .question-item { display: flex; align-items: flex-start; gap: 1rem; }
-        .q-num-badge { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; margin-top: 0.1rem; }
-        .question-item p { font-size: 0.92rem; color: var(--text-main); line-height: 1.6; flex: 1; }
-
-        .empty-full { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding: 4rem; color: var(--text-muted); text-align: center; }
-      `}</style>
+      </section>
     </div>
   );
 }

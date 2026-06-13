@@ -4,7 +4,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useState, useMemo } from 'react';
-import { GraduationCap, Mail, User, Building2, MapPin, Briefcase, ShieldCheck, Fingerprint } from 'lucide-react';
+import { GraduationCap, Mail, User, Building2, MapPin, ShieldCheck, Fingerprint, Info } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
+const selectClass =
+  "flex h-10 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
 export default function LecturerSignup() {
   const router = useRouter();
@@ -16,13 +23,13 @@ export default function LecturerSignup() {
   const [pinError, setPinError] = useState('');
 
   const [form, setForm] = useState({
-    name: '', 
-    email: '', 
+    name: '',
+    email: '',
     staffId: '',
-    college: '', 
-    department: '', 
-    title: 'Dr.', 
-    office: '', 
+    college: '',
+    department: '',
+    title: 'Dr.',
+    office: '',
     phone: ''
   });
 
@@ -36,8 +43,8 @@ export default function LecturerSignup() {
     }
   };
 
-  const selectedCollege = useMemo(() => 
-    structure.colleges.find(c => c.name === form.college), 
+  const selectedCollege = useMemo(() =>
+    structure.colleges.find(c => c.name === form.college),
     [form.college, structure]
   );
 
@@ -58,136 +65,169 @@ export default function LecturerSignup() {
   };
 
   return (
-    <div className="lecturer-signup-wrapper animate-fade-in">
-      <div className="signup-card glass-panel">
-        <div className="card-header">
-          <div className="header-icon"><GraduationCap size={32} /></div>
-          <h2>Faculty Onboarding</h2>
-          <p>Initialize your academic portal status.</p>
-        </div>
-
-        {!isVerified ? (
-          <div className="pin-verification">
-            <div className="lock-icon"><ShieldCheck size={40} /></div>
-            <h3>Faculty Access Verification</h3>
-            <p>To prevent unauthorized access, please enter the **Institutional Security PIN** provided to you by the HR or IT Department.</p>
-            
-            <form onSubmit={checkPIN} className="pin-form">
-              <div className="form-group">
-                <input 
-                  type="password" 
-                  placeholder="Enter 9-digit Staff PIN" 
-                  value={accessPIN} 
-                  onChange={e => setAccessPIN(e.target.value)}
-                  className={pinError ? 'error-ring' : ''}
-                />
-                {pinError && <span className="err-msg">{pinError}</span>}
-              </div>
-              <button type="submit" className="btn btn-primary full-width">Verify Staff Identity</button>
-            </form>
+    <main className="min-h-screen flex items-center justify-center bg-background px-4 py-12 animate-fade-in">
+      <Card className="w-full max-w-2xl border-border shadow-sm">
+        <CardHeader className="items-center text-center space-y-3 pb-6">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-brand-green-soft text-brand-green">
+            <GraduationCap size={26} strokeWidth={1.5} />
           </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="onboarding-form">
-            <div className="form-section-title">Personal Credentials</div>
-            <div className="form-row">
-              <div className="form-group title-select">
-                <label>Title</label>
-                <select value={form.title} onChange={e => setForm({...form, title: e.target.value})}>
-                  <option value="Dr.">Dr.</option>
-                  <option value="Prof.">Prof.</option>
-                  <option value="Mr.">Mr.</option>
-                  <option value="Mrs.">Mrs.</option>
-                </select>
+          <div className="space-y-1.5">
+            <CardTitle className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-balance">
+              Faculty onboarding
+            </CardTitle>
+            <CardDescription className="text-sm leading-relaxed text-pretty">
+              Set up your academic portal account.
+            </CardDescription>
+          </div>
+        </CardHeader>
+
+        <CardContent>
+          {!isVerified ? (
+            <div className="flex flex-col items-center text-center gap-5 py-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <ShieldCheck size={30} strokeWidth={1.5} />
               </div>
-              <div className="form-group flex-1">
-                <label><User size={14} /> Full Name (Surname Last)</label>
-                <input type="text" placeholder="Sarah Jenkins" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required />
+              <div className="space-y-1.5">
+                <h2 className="text-lg font-semibold text-foreground">Faculty access verification</h2>
+                <p className="text-sm leading-relaxed text-muted-foreground max-w-prose mx-auto text-pretty">
+                  To prevent unauthorized access, enter the institutional security PIN provided to you by the HR or IT department.
+                </p>
               </div>
+
+              <form onSubmit={checkPIN} className="w-full max-w-xs space-y-4 text-left">
+                <div className="space-y-1.5">
+                  <Label htmlFor="staff-pin">Staff PIN</Label>
+                  <Input
+                    id="staff-pin"
+                    type="password"
+                    placeholder="Enter 9-digit staff PIN"
+                    value={accessPIN}
+                    onChange={e => setAccessPIN(e.target.value)}
+                    className={`h-11 text-center tracking-[0.4em] ${pinError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                    aria-invalid={!!pinError}
+                  />
+                  {pinError && <p className="text-xs text-destructive">{pinError}</p>}
+                </div>
+                <Button type="submit" className="w-full active:translate-y-px">
+                  Verify staff identity
+                </Button>
+              </form>
             </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <section className="space-y-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Personal credentials
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="space-y-1.5 sm:col-span-1">
+                    <Label htmlFor="title">Title</Label>
+                    <select
+                      id="title"
+                      className={selectClass}
+                      value={form.title}
+                      onChange={e => setForm({...form, title: e.target.value})}
+                    >
+                      <option value="Dr.">Dr.</option>
+                      <option value="Prof.">Prof.</option>
+                      <option value="Mr.">Mr.</option>
+                      <option value="Mrs.">Mrs.</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5 sm:col-span-3">
+                    <Label htmlFor="name" className="flex items-center gap-1.5">
+                      <User size={16} strokeWidth={1.5} /> Full name (surname last)
+                    </Label>
+                    <Input id="name" type="text" placeholder="Sarah Jenkins" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-10" />
+                  </div>
+                </div>
 
-            <div className="form-row">
-              <div className="form-group flex-1">
-                <label><Fingerprint size={14} /> Lecturer ID / Staff ID</label>
-                <input type="text" placeholder="LEC/2024/102" value={form.staffId} onChange={e => setForm({...form, staffId: e.target.value})} required />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="staff-id" className="flex items-center gap-1.5">
+                      <Fingerprint size={16} strokeWidth={1.5} /> Lecturer ID / staff ID
+                    </Label>
+                    <Input id="staff-id" type="text" placeholder="LEC/2024/102" value={form.staffId} onChange={e => setForm({...form, staffId: e.target.value})} required className="h-10" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="email" className="flex items-center gap-1.5">
+                      <Mail size={16} strokeWidth={1.5} /> Official email
+                    </Label>
+                    <Input id="email" type="email" placeholder="lecturer@uni.edu" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required className="h-10" />
+                  </div>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Institutional placement
+                </p>
+                <div className="space-y-1.5">
+                  <Label htmlFor="college" className="flex items-center gap-1.5">
+                    <Building2 size={16} strokeWidth={1.5} /> College / faculty
+                  </Label>
+                  <select
+                    id="college"
+                    className={selectClass}
+                    value={form.college}
+                    onChange={e => setForm({...form, college: e.target.value, department: ''})}
+                    required
+                  >
+                    <option value="">Select college</option>
+                    {structure.colleges.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="department" className="flex items-center gap-1.5">
+                      <Building2 size={16} strokeWidth={1.5} /> Department
+                    </Label>
+                    <select
+                      id="department"
+                      className={selectClass}
+                      value={form.department}
+                      onChange={e => setForm({...form, department: e.target.value})}
+                      disabled={!form.college}
+                      required
+                    >
+                      <option value="">Select department</option>
+                      {selectedCollege?.programs.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="office" className="flex items-center gap-1.5">
+                      <MapPin size={16} strokeWidth={1.5} /> Office
+                    </Label>
+                    <Input id="office" type="text" placeholder="Block B, 402" value={form.office} onChange={e => setForm({...form, office: e.target.value})} className="h-10" />
+                  </div>
+                </div>
+              </section>
+
+              <div className="flex gap-2.5 rounded-md border-l-2 border-primary bg-muted px-4 py-3 text-xs leading-relaxed text-muted-foreground">
+                <Info size={16} strokeWidth={1.5} className="mt-0.5 shrink-0" />
+                <p>Your default portal password will be set to your surname in lowercase.</p>
               </div>
-              <div className="form-group flex-1">
-                <label><Mail size={14} /> Official Email</label>
-                <input type="email" placeholder="lecturer@uni.edu" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required />
-              </div>
-            </div>
 
-            <div className="form-section-title">Institutional Placement</div>
-            <div className="form-group">
-              <label><Building2 size={14} /> College / Faculty</label>
-              <select value={form.college} onChange={e => setForm({...form, college: e.target.value, department: ''})} required>
-                <option value="">Select College</option>
-                {structure.colleges.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-              </select>
-            </div>
+              <Button type="submit" className="w-full active:translate-y-px" disabled={loading}>
+                {loading ? "Verifying…" : "Create faculty account"}
+              </Button>
+            </form>
+          )}
+        </CardContent>
 
-            <div className="form-row">
-              <div className="form-group flex-1">
-                <label><Building2 size={14} /> Department</label>
-                <select value={form.department} onChange={e => setForm({...form, department: e.target.value})} disabled={!form.college} required>
-                  <option value="">Select Dept</option>
-                  {selectedCollege?.departments.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-              </div>
-              <div className="form-group flex-1">
-                <label><MapPin size={14} /> Office</label>
-                <input type="text" placeholder="Block B, 402" value={form.office} onChange={e => setForm({...form, office: e.target.value})} />
-              </div>
-            </div>
-
-            <div className="password-hint">
-               * Note: The default password for this portal will be set to the <strong>SURNAME</strong> (lowercase).
-            </div>
-
-            <button type="submit" className="btn btn-primary submit-btn" disabled={loading}>
-              {loading ? "Verifying..." : "Initialize Faculty Access"}
-            </button>
-          </form>
-        )}
-
-        <div className="card-footer">
-          <p>Registering as a student? <Link href="/signup">Click here</Link></p>
-          <Link href="/login" className="login-link">Already have an account? Sign In</Link>
-        </div>
-      </div>
-
-      <style jsx>{`
-        .lecturer-signup-wrapper { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 3rem 1rem; background: #f8fafc; }
-        :global([data-theme='dark']) .lecturer-signup-wrapper { background: #0f172a; }
-        .signup-card { width: 100%; max-width: 600px; padding: 3rem; }
-        .card-header { text-align: center; margin-bottom: 2.5rem; }
-        .header-icon { width: 64px; height: 64px; background: var(--primary); color: white; border-radius: 18px; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem; }
-        .card-header h2 { font-size: 2rem; margin-bottom: 0.5rem; }
-        .card-header p { color: var(--text-muted); font-size: 0.95rem; }
-
-        .onboarding-form { display: flex; flex-direction: column; gap: 1.25rem; }
-        .form-section-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; color: var(--primary); margin-top: 0.5rem; }
-        .form-row { display: flex; gap: 1rem; }
-        .flex-1 { flex: 1; }
-        .title-select { width: 120px; }
-        .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
-        .form-group label { font-size: 0.82rem; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 0.4rem; }
-        .form-group input, .form-group select { padding: 0.85rem 1rem; border-radius: 12px; border: 1px solid var(--card-border); background: rgba(255, 255, 255, 0.7); font-family: inherit; font-size: 0.95rem; }
-        [data-theme='dark'] .form-group input, [data-theme='dark'] .form-group select { background: rgba(17, 24, 39, 0.5); }
-        .password-hint { font-size: 0.75rem; color: var(--text-muted); padding: 0.75rem; background: rgba(0,0,0,0.03); border-radius: 8px; border-left: 3px solid var(--primary); }
-        .submit-btn { margin-top: 1rem; padding: 1rem; font-size: 1.05rem; }
-
-        .pin-verification { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1.5rem; padding: 1rem 0; }
-        .lock-icon { color: var(--primary); opacity: 0.8; }
-        .pin-verification h3 { font-size: 1.4rem; color: var(--text-main); }
-        .pin-verification p { font-size: 0.9rem; color: var(--text-muted); line-height: 1.6; }
-        .pin-form { width: 100%; max-width: 320px; display: flex; flex-direction: column; gap: 1rem; }
-        .pin-form input { text-align: center; letter-spacing: 4px; font-weight: 800; font-size: 1.25rem; }
-        .error-ring { border-color: var(--danger) !important; }
-        .err-msg { font-size: 0.75rem; color: var(--danger); font-weight: 600; margin-top: 0.3rem; }
-        .card-footer { margin-top: 2.5rem; text-align: center; display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.9rem; }
-        .card-footer a { color: var(--primary); font-weight: 600; }
-        @media (max-width: 600px) { .form-row { flex-direction: column; } .title-select { width: 100%; } }
-      `}</style>
-    </div>
+        <CardFooter className="flex-col gap-2 border-t border-border pt-6 text-center text-sm text-muted-foreground">
+          <p>
+            Registering as a student?{' '}
+            <Link href="/signup" className="font-medium text-foreground underline-offset-4 hover:underline">
+              Sign up here
+            </Link>
+          </p>
+          <Link href="/login" className="font-medium text-foreground underline-offset-4 hover:underline">
+            Already have an account? Sign in
+          </Link>
+        </CardFooter>
+      </Card>
+    </main>
   );
 }

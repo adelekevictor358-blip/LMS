@@ -26,209 +26,80 @@ export default function LecturerSidebar() {
   ];
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-content">
-        <div className="logo mb-8 px-2 flex items-center gap-3">
-          <div className="h-10 w-10 bg-white rounded-xl shadow-sm p-1 flex items-center justify-center overflow-hidden flex-shrink-0">
-            <img src="/mtu-logo.png" alt="Mountain Top University" className="w-full h-full object-contain" />
+    <aside className="sticky top-0 h-screen w-[250px] flex-shrink-0 overflow-y-auto border-r border-border bg-card transition-colors">
+      <div className="flex min-h-full flex-col p-4">
+        <div className="mb-8 flex items-center gap-3 px-2">
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl border border-border bg-background p-1">
+            <img src="/mtu-logo.png" alt="Mountain Top University" className="h-full w-full object-contain" />
           </div>
           <div className="flex flex-col">
-            <span className="text-[11px] font-black text-slate-900 dark:text-white uppercase tracking-wider leading-tight">Mountain Top</span>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-none mt-0.5">Faculty Portal</span>
+            <span className="font-serif text-sm font-semibold tracking-tight text-foreground">Mountain Top</span>
+            <span className="text-xs text-muted-foreground">Faculty portal</span>
           </div>
         </div>
 
-        <nav className="nav-menu">
-          <div className="nav-section">Faculty Menu</div>
-          {links.map((link) => (
-            <Link
-              href={link.path}
-              key={link.path}
-              className={`nav-link ${pathname === link.path ? 'active' : ''} ${link.isLive ? 'live-auditorium' : ''}`}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                <span className="nav-icon">{link.icon}</span>
-                {link.label}
-              </div>
-              {link.badge > 0 && (
-                <span className={`nav-badge ${link.isLive ? 'bg-red-500 animate-pulse' : ''}`}>
-                  {link.isLive ? 'LIVE' : link.badge}
+        <nav className="flex flex-1 flex-col gap-1">
+          <div className="mb-1 px-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Faculty menu
+          </div>
+          {links.map((link) => {
+            const isActive = pathname === link.path;
+            return (
+              <Link
+                href={link.path}
+                key={link.path}
+                aria-current={isActive ? 'page' : undefined}
+                className={`group flex items-center justify-between rounded-md px-3 py-2.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card ${
+                  isActive
+                    ? 'bg-primary/10 font-semibold text-primary'
+                    : 'font-medium text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+              >
+                <span className="flex flex-1 items-center gap-3">
+                  <span className={`flex items-center ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}>
+                    {link.icon}
+                  </span>
+                  {link.label}
                 </span>
-              )}
-            </Link>
-          ))}
+                {link.isLive ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
+                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" aria-hidden="true" />
+                    Live
+                  </span>
+                ) : (
+                  link.badge > 0 && (
+                    <span className="inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-destructive px-1.5 py-0.5 text-xs font-medium tabular-nums text-destructive-foreground">
+                      {link.badge}
+                    </span>
+                  )
+                )}
+              </Link>
+            );
+          })}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="lecturer-profile">
-            <div className="avatar">{user?.avatar || 'L'}</div>
-            <div className="profile-info">
-              <strong>{user?.name}</strong>
-              <span>{user?.department}</span>
+        <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+          <div className="flex items-center gap-3 px-1 py-2">
+            <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+              {user?.avatar || 'L'}
+            </div>
+            <div className="flex min-w-0 flex-col">
+              <strong className="truncate text-sm font-semibold leading-tight text-foreground">{user?.name}</strong>
+              <span className="truncate text-xs text-muted-foreground">{user?.department}</span>
             </div>
           </div>
-          <Link href="/login" className="nav-link logout" onClick={logout}>
-            <span className="nav-icon"><LogOut size={18} /></span>
-            Log Out
+          <Link
+            href="/login"
+            onClick={logout}
+            className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+          >
+            <span className="flex items-center">
+              <LogOut size={18} />
+            </span>
+            Log out
           </Link>
         </div>
       </div>
-
-      <style jsx global>{`
-        .sidebar {
-          width: 250px;
-          position: sticky;
-          top: 0;
-          height: 100vh;
-          background: var(--sidebar-bg);
-          backdrop-filter: blur(16px);
-          -webkit-backdrop-filter: blur(16px);
-          border-right: 1px solid var(--card-border);
-          transition: background-color 0.3s ease, border-color 0.3s ease;
-        }
-
-        .sidebar-content {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-          padding: 1.5rem 1rem;
-        }
-
-        .logo {
-          margin-bottom: 2rem;
-          padding: 0 0.5rem;
-          display: flex;
-          align-items: center;
-          gap: 0.6rem;
-          font-family: 'Poppins', sans-serif;
-          font-weight: 700;
-        }
-
-        .logo-text {
-          font-size: 0.78rem;
-          color: var(--text-main);
-          letter-spacing: 1px;
-        }
-
-        .logo-icon {
-          color: var(--primary);
-          display: flex;
-        }
-
-        .sidebar .nav-section {
-          font-size: 0.65rem;
-          text-transform: uppercase;
-          letter-spacing: 1px;
-          font-weight: 700;
-          color: var(--text-muted);
-          margin-bottom: 0.75rem;
-          padding: 0 0.75rem;
-        }
-
-        .sidebar .nav-menu {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-        }
-
-        .sidebar .nav-link {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 0.7rem 0.85rem;
-          border-radius: 8px;
-          color: var(--text-muted);
-          font-weight: 500;
-          font-size: 0.85rem;
-          transition: all 0.2s;
-          text-decoration: none;
-        }
-
-        .nav-badge {
-          background: var(--danger);
-          color: white;
-          border-radius: 12px;
-          padding: 0.1rem 0.4rem;
-          font-size: 0.65rem;
-          font-weight: 700;
-        }
-
-        .sidebar .nav-link:hover {
-          background: var(--nav-active);
-          color: var(--text-main);
-        }
-
-        .sidebar .nav-link.active {
-          background: var(--nav-active);
-          color: var(--primary);
-          font-weight: 600;
-          border-left: 3px solid var(--primary);
-          border-radius: 0 8px 8px 0;
-        }
-
-        .sidebar .nav-icon {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          opacity: 0.9;
-        }
-
-        .sidebar-footer {
-          display: flex;
-          flex-direction: column;
-          gap: 0.5rem;
-          padding-top: 1rem;
-          border-top: 1px solid var(--card-border);
-        }
-
-        .lecturer-profile {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          padding: 0.75rem;
-        }
-
-        .lecturer-profile .avatar {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          background: var(--primary);
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 0.75rem;
-          font-weight: 700;
-          flex-shrink: 0;
-        }
-
-        .lecturer-profile .profile-info {
-          display: flex;
-          flex-direction: column;
-        }
-
-        .lecturer-profile .profile-info strong {
-          font-size: 0.82rem;
-          color: var(--text-main);
-          line-height: 1.3;
-        }
-
-        .lecturer-profile .profile-info span {
-          font-size: 0.72rem;
-          color: var(--primary);
-          font-weight: 500;
-        }
-
-        .sidebar .logout {
-          color: var(--text-muted);
-        }
-
-        .sidebar .logout:hover {
-          color: var(--danger);
-          background: rgba(211, 47, 47, 0.05);
-        }
-      `}</style>
     </aside>
   );
 }

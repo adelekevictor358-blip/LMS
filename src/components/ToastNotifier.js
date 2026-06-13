@@ -18,101 +18,37 @@ export default function ToastNotifier() {
 
   if (!activeToast) return null;
 
+  const isUrgent = activeToast.isUrgent;
+
   return (
-    <div className={`toast-container animate-slide-up ${activeToast.isUrgent ? 'urgent' : ''}`}>
-      <div className="toast-icon">
-        {activeToast.isUrgent ? <ShieldAlert size={20} /> : <Info size={20} />}
+    <div
+      role="status"
+      aria-live={isUrgent ? 'assertive' : 'polite'}
+      className={`fixed right-4 top-12 z-[999999] flex w-[min(24rem,calc(100vw-2rem))] items-start gap-3 rounded-xl border bg-card p-4 text-card-foreground shadow-sm animate-fade-in ${
+        isUrgent ? 'border-l-2 border-l-destructive border-border' : 'border-l-2 border-l-primary border-border'
+      }`}
+    >
+      <div className={`mt-0.5 shrink-0 ${isUrgent ? 'text-destructive' : 'text-primary'}`}>
+        {isUrgent ? <ShieldAlert size={18} strokeWidth={1.75} /> : <Info size={18} strokeWidth={1.75} />}
       </div>
-      <div className="toast-content">
-        <h4>{activeToast.isUrgent ? 'URGENT NOTIFICATION' : 'Official Notice'}</h4>
-        <p>{activeToast.text}</p>
+
+      <div className="min-w-0 flex-1">
+        <h4 className="text-xs font-medium text-muted-foreground">
+          {isUrgent ? 'Urgent notification' : 'Official notice'}
+        </h4>
+        <p className="mt-1 text-sm leading-relaxed text-foreground text-pretty">
+          {activeToast.text}
+        </p>
       </div>
-      <button className="close-toast" onClick={clearActiveToast}><X size={16}/></button>
 
-      <style jsx>{`
-        .toast-container {
-          position: fixed;
-          top: 3rem;
-          right: 2rem;
-          display: flex;
-          align-items: flex-start;
-          gap: 1rem;
-          padding: 1rem 1.25rem;
-          background: #ffffff;
-          color: #111827;
-          border-radius: 8px;
-          border: 1px solid #d1d5db;
-          box-shadow: 0 15px 35px rgba(0,0,0,0.25);
-          z-index: 999999;
-          width: 400px;
-          border-left: 5px solid var(--primary);
-        }
-
-        .toast-container.urgent {
-          border-left-color: var(--danger);
-        }
-
-        :global([data-theme='dark']) .toast-container {
-          background: #1f2937;
-          color: #f9fafb;
-          border-color: #374151;
-        }
-
-        .toast-icon {
-          color: var(--primary);
-        }
-        
-        .toast-container.urgent .toast-icon {
-          color: var(--danger);
-        }
-
-        .toast-content {
-          flex: 1;
-        }
-
-        .toast-content h4 {
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          margin-bottom: 0.35rem;
-          color: #6b7280;
-          font-weight: 700;
-        }
-        :global([data-theme='dark']) .toast-content h4 {
-          color: #9ca3af;
-        }
-
-        .toast-content p {
-          font-size: 0.95rem;
-          line-height: 1.4;
-          font-weight: 600;
-        }
-
-        .close-toast {
-          background: transparent;
-          border: none;
-          color: #6b7280;
-          cursor: pointer;
-        }
-
-        .close-toast:hover {
-          color: #111827;
-        }
-        :global([data-theme='dark']) .close-toast {
-          color: #9ca3af;
-        }
-        :global([data-theme='dark']) .close-toast:hover {
-          color: #ffffff;
-        }
-
-        @keyframes slideIn {
-          from { right: -25rem; opacity: 0; }
-          to { right: 2rem; opacity: 1; }
-        }
-
-        .animate-slide-up {
-          animation: slideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-      `}</style>
+      <button
+        type="button"
+        onClick={clearActiveToast}
+        aria-label="Dismiss notification"
+        className="-mr-1 -mt-1 shrink-0 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+      >
+        <X size={16} />
+      </button>
     </div>
   );
 }

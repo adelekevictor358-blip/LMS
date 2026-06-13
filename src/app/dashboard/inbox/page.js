@@ -3,6 +3,7 @@
 import { useStore } from '@/store/useStore';
 import { Mail, CheckCircle2, ShieldAlert, Clock, Inbox as InboxIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 
 export default function Inbox() {
   const { notifications, markNotificationRead } = useStore();
@@ -14,254 +15,95 @@ export default function Inbox() {
   };
 
   return (
-    <div className="inbox-page animate-fade-in">
-      <div className="inbox-header">
-        <h2><InboxIcon size={28} /> University Communications</h2>
-        <p>Official announcements, academic alerts, and scheduled broadcasts.</p>
-      </div>
+    <div className="flex h-full flex-col animate-fade-in">
+      <header className="mb-6">
+        <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground flex items-center gap-2.5">
+          <InboxIcon size={26} strokeWidth={1.75} className="text-muted-foreground" />
+          University communications
+        </h1>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground text-pretty">
+          Official announcements, academic alerts, and scheduled broadcasts.
+        </p>
+      </header>
 
-      <div className="inbox-container glass-panel">
-        <div className="message-list">
-          {notifications.map(msg => (
-            <div 
-              key={msg.id} 
-              className={`message-item ${!msg.read ? 'unread' : ''} ${selectedMsg?.id === msg.id ? 'active' : ''}`}
-              onClick={() => handleSelect(msg)}
-            >
-              <div className="msg-icon">
-                {msg.isUrgent ? <ShieldAlert size={18} color="var(--danger)" /> : <Mail size={18} />}
-              </div>
-              <div className="msg-preview">
-                <div className="msg-preview-header">
-                  <h5>{msg.isUrgent ? 'URGENT NOTIFICATION' : 'Official Notice'}</h5>
-                  <span>{msg.time}</span>
-                </div>
-                <p>{msg.text.substring(0, 40)}{msg.text.length > 40 ? '...' : ''}</p>
-              </div>
-              {!msg.read && <div className="unread-dot"></div>}
-            </div>
-          ))}
+      <div className="flex flex-1 min-h-0 overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <nav className="w-[340px] shrink-0 overflow-y-auto border-r border-border bg-muted/30">
+          {notifications.map(msg => {
+            const isActive = selectedMsg?.id === msg.id;
+            return (
+              <button
+                key={msg.id}
+                type="button"
+                onClick={() => handleSelect(msg)}
+                aria-current={isActive ? 'true' : undefined}
+                className={`group relative flex w-full items-start gap-3 border-b border-border px-4 py-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
+                  isActive
+                    ? 'bg-accent border-l-2 border-l-primary'
+                    : 'border-l-2 border-l-transparent hover:bg-accent/60'
+                }`}
+              >
+                <span className={`mt-0.5 shrink-0 ${msg.isUrgent ? 'text-destructive' : !msg.read ? 'text-primary' : 'text-muted-foreground'}`}>
+                  {msg.isUrgent ? <ShieldAlert size={16} /> : <Mail size={16} />}
+                </span>
+
+                <span className="min-w-0 flex-1">
+                  <span className="mb-1 flex items-start justify-between gap-2">
+                    <span className={`truncate text-sm ${!msg.read ? 'font-semibold text-foreground' : 'font-medium text-foreground'}`}>
+                      {msg.isUrgent ? 'Urgent notification' : 'Official notice'}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{msg.time}</span>
+                  </span>
+                  <span className={`block truncate text-sm leading-relaxed ${!msg.read ? 'text-foreground' : 'text-muted-foreground'}`}>
+                    {msg.text.substring(0, 40)}{msg.text.length > 40 ? '...' : ''}
+                  </span>
+                </span>
+
+                {!msg.read && (
+                  <span className="absolute right-3.5 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-primary" aria-label="Unread" />
+                )}
+              </button>
+            );
+          })}
+
           {notifications.length === 0 && (
-            <div className="empty-state">
-              <CheckCircle2 size={32} />
-              <p>You're all caught up!</p>
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <CheckCircle2 size={32} strokeWidth={1.5} className="text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">You&apos;re all caught up.</p>
             </div>
           )}
-        </div>
+        </nav>
 
-        <div className="message-reader">
+        <section className="flex flex-1 flex-col bg-card">
           {selectedMsg ? (
-            <div className="reader-content">
-              <div className="reader-header">
-                <h3>{selectedMsg.isUrgent ? 'URGENT NOTIFICATION' : 'Official Notice'}</h3>
-                <div className="reader-meta">
-                  <span><Clock size={14}/> Received: {selectedMsg.time}</span>
-                  <span className="sender">From: IT Administration</span>
+            <article className="h-full overflow-y-auto p-8">
+              <header className="mb-6 border-b border-border pb-5">
+                <div className="mb-3 flex items-center gap-2">
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {selectedMsg.isUrgent ? 'Urgent notification' : 'Official notice'}
+                  </h2>
+                  {selectedMsg.isUrgent && (
+                    <Badge className="border-transparent bg-destructive/10 text-destructive">Urgent</Badge>
+                  )}
                 </div>
+                <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <Clock size={14} /> Received {selectedMsg.time}
+                  </span>
+                  <span className="font-medium text-foreground">From IT administration</span>
+                </div>
+              </header>
+              <div className="max-w-prose whitespace-pre-wrap text-sm leading-relaxed text-foreground text-pretty">
+                {selectedMsg.text}
               </div>
-              <div className="reader-body">
-                <p>{selectedMsg.text}</p>
-              </div>
-            </div>
+            </article>
           ) : (
-            <div className="empty-state">
-              <Mail size={48} color="var(--text-muted)" />
-              <p>Select a message to read.</p>
+            <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+              <Mail size={40} strokeWidth={1.5} className="text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Select a message to read.</p>
             </div>
           )}
-        </div>
+        </section>
       </div>
-
-      <style jsx>{`
-        .inbox-page {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-        }
-
-        .inbox-header {
-          margin-bottom: 1.5rem;
-        }
-
-        .inbox-header h2 {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-          font-size: 1.5rem;
-          color: var(--text-main);
-        }
-
-        .inbox-header p {
-          color: var(--text-muted);
-          margin-top: 0.25rem;
-        }
-
-        .inbox-container {
-          display: flex;
-          flex: 1;
-          height: 600px;
-          overflow: hidden;
-        }
-
-        .message-list {
-          width: 350px;
-          border-right: 1px solid var(--card-border);
-          overflow-y: auto;
-          background: rgba(255, 255, 255, 0.4);
-        }
-        :global([data-theme='dark']) .message-list {
-          background: rgba(17, 24, 39, 0.4);
-        }
-
-        .message-item {
-          display: flex;
-          align-items: flex-start;
-          gap: 1rem;
-          padding: 1.25rem 1rem;
-          border-bottom: 1px solid var(--card-border);
-          cursor: pointer;
-          transition: background 0.2s;
-          position: relative;
-        }
-
-        .message-item:hover {
-          background: rgba(0, 121, 107, 0.05);
-        }
-        :global([data-theme='dark']) .message-item:hover {
-          background: rgba(38, 166, 154, 0.1);
-        }
-
-        .message-item.active {
-          background: var(--nav-active);
-          border-left: 4px solid var(--primary);
-        }
-
-        .msg-icon {
-          color: var(--text-muted);
-          margin-top: 0.15rem;
-        }
-
-        .message-item.unread .msg-icon {
-          color: var(--primary);
-        }
-
-        .msg-preview {
-          flex: 1;
-        }
-
-        .msg-preview-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: flex-start;
-          margin-bottom: 0.35rem;
-        }
-
-        .msg-preview-header h5 {
-          font-size: 0.85rem;
-          color: var(--text-main);
-          font-weight: 600;
-        }
-
-        .message-item.unread .msg-preview-header h5 {
-          color: var(--primary);
-          font-weight: 700;
-        }
-
-        .msg-preview-header span {
-          font-size: 0.7rem;
-          color: var(--text-muted);
-        }
-
-        .msg-preview p {
-          font-size: 0.85rem;
-          color: var(--text-muted);
-          line-height: 1.4;
-        }
-
-        .message-item.unread .msg-preview p {
-          color: var(--text-main);
-          font-weight: 500;
-        }
-
-        .unread-dot {
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: var(--primary);
-          position: absolute;
-          right: 1rem;
-          top: 50%;
-          transform: translateY(-50%);
-        }
-
-        .message-reader {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          background: var(--card-bg);
-        }
-
-        .reader-content {
-          padding: 2.5rem;
-          height: 100%;
-        }
-
-        .reader-header {
-          border-bottom: 1px solid var(--card-border);
-          padding-bottom: 1.5rem;
-          margin-bottom: 1.5rem;
-        }
-
-        .reader-header h3 {
-          font-size: 1.4rem;
-          color: var(--text-main);
-          margin-bottom: 0.5rem;
-        }
-
-        .reader-meta {
-          display: flex;
-          align-items: center;
-          gap: 1.5rem;
-          color: var(--text-muted);
-          font-size: 0.85rem;
-        }
-
-        .reader-meta span {
-          display: flex;
-          align-items: center;
-          gap: 0.4rem;
-        }
-
-        .sender {
-          font-weight: 600;
-          color: var(--primary);
-        }
-
-        .reader-body {
-          font-size: 1rem;
-          line-height: 1.7;
-          color: var(--text-main);
-          white-space: pre-wrap;
-        }
-
-        .empty-state {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          height: 100%;
-          gap: 1rem;
-          color: var(--text-muted);
-        }
-
-        .message-list::-webkit-scrollbar {
-          width: 6px;
-        }
-        .message-list::-webkit-scrollbar-thumb {
-          background: var(--card-border);
-          border-radius: 3px;
-        }
-      `}</style>
     </div>
   );
 }

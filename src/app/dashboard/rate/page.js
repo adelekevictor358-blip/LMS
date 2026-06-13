@@ -2,7 +2,9 @@
 
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
-import { Star, MessageSquare, CheckCircle2 } from 'lucide-react';
+import { Star, AlertTriangle, CheckCircle2, UserSquare } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 export default function RateLecturer() {
   const { user, courses, lecturerRatings, submitRating, getAllUsers } = useStore();
@@ -32,177 +34,174 @@ export default function RateLecturer() {
     setTimeout(() => { setSubmitted(false); setSelected(null); setRating(0); setComment(''); setSelectedCourse(''); }, 3000);
   };
 
+  const ratingLabel = (value) =>
+    value === 1 ? 'Poor' : value === 2 ? 'Below average' : value === 3 ? 'Average' : value === 4 ? 'Good' : 'Excellent';
+
   return (
-    <div className="page-container animate-fade-in">
-      <div className="page-header">
-        <div>
-          <h2>Rate Your Lecturers</h2>
-          <p>Your feedback helps improve the quality of teaching. All ratings are anonymous.</p>
-        </div>
-      </div>
+    <main className="flex flex-col gap-8 animate-fade-in">
+      <header>
+        <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+          Rate your lecturers
+        </h1>
+        <p className="mt-1 max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
+          Your feedback helps improve the quality of teaching. All ratings are anonymous.
+        </p>
+      </header>
 
-      <div className="rate-layout">
-        {/* Lecturers List */}
-        <div className="lecturers-col">
-          {lecturers.map(lecturer => {
-            const avg = getAvgRating(lecturer.id);
-            const lecturerCourses = getLecturerCourses(lecturer.id);
-            return (
-              <div
-                key={lecturer.id}
-                className={`lecturer-card glass-panel ${selected?.id === lecturer.id ? 'active' : ''}`}
-                onClick={() => { setSelected(lecturer); setSelectedCourse(''); setRating(0); setComment(''); setSubmitted(false); }}
-              >
-                <div className="lec-avatar">{lecturer.avatar}</div>
-                <div className="lec-body">
-                  <strong>{lecturer.title} {lecturer.name}</strong>
-                  <span className="lec-dept">{lecturer.department}</span>
-                  <div className="lec-meta">
-                    <span className="lec-courses">{lecturerCourses.length} course{lecturerCourses.length !== 1 ? 's' : ''}</span>
-                    {avg && (
-                      <span className="lec-avg">
-                        {'★'.repeat(Math.round(parseFloat(avg)))}{'☆'.repeat(5 - Math.round(parseFloat(avg)))} {avg}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
+        {/* Lecturers list */}
+        <section aria-label="Lecturers" className="flex flex-col gap-3">
+          {lecturers.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card p-8 text-center">
+              <UserSquare size={40} strokeWidth={1.5} className="text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">No lecturers are available to rate right now.</p>
+            </div>
+          ) : (
+            lecturers.map(lecturer => {
+              const avg = getAvgRating(lecturer.id);
+              const lecturerCourses = getLecturerCourses(lecturer.id);
+              const isActive = selected?.id === lecturer.id;
+              return (
+                <button
+                  key={lecturer.id}
+                  type="button"
+                  aria-pressed={isActive}
+                  className={`group relative flex items-center gap-4 overflow-hidden rounded-xl border bg-card p-4 text-left shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                    isActive ? 'border-primary/60' : 'border-border hover:border-primary/40'
+                  }`}
+                  onClick={() => { setSelected(lecturer); setSelectedCourse(''); setRating(0); setComment(''); setSubmitted(false); }}
+                >
+                  <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                    {lecturer.avatar}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-semibold text-card-foreground">
+                      {lecturer.title || 'Dr.'} {lecturer.name}
+                    </span>
+                    <span className="block truncate text-xs font-medium text-brand-green">{lecturer.department}</span>
+                    <span className="mt-1 flex items-center gap-3">
+                      <span className="text-xs text-muted-foreground">
+                        {lecturerCourses.length} course{lecturerCourses.length !== 1 ? 's' : ''}
                       </span>
-                    )}
-                  </div>
-                </div>
-                {selected?.id === lecturer.id && <div className="selected-indicator"></div>}
-              </div>
-            );
-          })}
-        </div>
+                      {avg && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-gold tabular-nums">
+                          <Star size={12} className="fill-current" strokeWidth={0} aria-hidden="true" />
+                          {avg}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  {isActive && (
+                    <span aria-hidden="true" className="absolute inset-y-0 right-0 w-1 rounded-l-none rounded-r-xl bg-primary" />
+                  )}
+                </button>
+              );
+            })
+          )}
+        </section>
 
-        {/* Rating Form */}
-        <div className="rating-col glass-panel">
+        {/* Rating form */}
+        <section aria-label="Rating form" className="rounded-xl border border-border bg-card p-6 shadow-sm">
           {!selected ? (
-            <div className="select-prompt">
-              <Star size={48} />
-              <h3>Select a lecturer to rate</h3>
-              <p>Click on any lecturer from the left to submit your feedback.</p>
+            <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-3 text-center">
+              <Star size={40} strokeWidth={1.5} className="text-muted-foreground" />
+              <h2 className="text-lg font-semibold text-foreground">Select a lecturer to rate</h2>
+              <p className="max-w-prose text-sm text-muted-foreground">
+                Choose any lecturer from the list to submit your feedback.
+              </p>
             </div>
           ) : submitted ? (
-            <div className="success-screen">
-              <CheckCircle2 size={56} color="var(--success)" />
-              <h3>Thank you for your feedback!</h3>
-              <p>Your rating for {selected.title} {selected.name} has been recorded.</p>
+            <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-3 text-center">
+              <CheckCircle2 size={44} strokeWidth={1.5} className="text-success" />
+              <h2 className="text-lg font-semibold text-foreground">Thanks for your feedback</h2>
+              <p className="max-w-prose text-sm text-muted-foreground">
+                Your rating for {selected.title || 'Dr.'} {selected.name} has been recorded.
+              </p>
             </div>
           ) : (
             <>
-              <div className="form-header">
-                <div className="form-lec-info">
-                  <div className="lec-avatar large">{selected.avatar}</div>
-                  <div>
-                    <h3>{selected.title} {selected.name}</h3>
-                    <span>{selected.department} · {selected.office}</span>
-                  </div>
+              <header className="flex items-center gap-4 border-b border-border pb-5">
+                <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-primary text-base font-semibold text-primary-foreground">
+                  {selected.avatar}
+                </span>
+                <div className="min-w-0">
+                  <h2 className="truncate text-lg font-semibold text-foreground">{selected.title || 'Dr.'} {selected.name}</h2>
+                  <p className="truncate text-sm text-muted-foreground">{[selected.department, selected.office].filter(Boolean).join(' · ')}</p>
                 </div>
-              </div>
-              <form onSubmit={handleSubmit} className="rating-form">
-                <div className="form-field">
-                  <label>Course</label>
-                  <select value={selectedCourse} onChange={e => setSelectedCourse(e.target.value)} required>
-                    <option value="">Select the course you're rating for...</option>
+              </header>
+
+              <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-6">
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="rate-course" className="text-sm font-medium text-foreground">Course</label>
+                  <select
+                    id="rate-course"
+                    value={selectedCourse}
+                    onChange={e => setSelectedCourse(e.target.value)}
+                    required
+                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  >
+                    <option value="">Select the course you&apos;re rating for</option>
                     {getLecturerCourses(selected.id).map(c => (
                       <option key={c.id} value={c.id}>{c.code} — {c.title}</option>
                     ))}
                   </select>
                 </div>
 
-                <div className="star-rating-section">
-                  <label>Your Rating</label>
-                  <div className="stars">
-                    {[1, 2, 3, 4, 5].map(s => (
-                      <button
-                        key={s}
-                        type="button"
-                        className={`star-btn ${s <= (hovered || rating) ? 'active' : ''}`}
-                        onMouseEnter={() => setHovered(s)}
-                        onMouseLeave={() => setHovered(0)}
-                        onClick={() => setRating(s)}
-                      >
-                        ★
-                      </button>
-                    ))}
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-foreground">Your rating</label>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map(s => {
+                      const filled = s <= (hovered || rating);
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          aria-label={`${s} star${s !== 1 ? 's' : ''}`}
+                          className="rounded-md p-1 transition-transform focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-px"
+                          onMouseEnter={() => setHovered(s)}
+                          onMouseLeave={() => setHovered(0)}
+                          onClick={() => setRating(s)}
+                        >
+                          <Star
+                            size={28}
+                            strokeWidth={1.5}
+                            className={filled ? 'text-gold fill-current' : 'text-muted-foreground/40'}
+                          />
+                        </button>
+                      );
+                    })}
                   </div>
                   {rating > 0 && (
-                    <span className="rating-label">
-                      {rating === 1 ? 'Poor' : rating === 2 ? 'Below Average' : rating === 3 ? 'Average' : rating === 4 ? 'Good' : 'Excellent'}
-                    </span>
+                    <span className="text-sm font-medium text-brand-green">{ratingLabel(rating)}</span>
                   )}
                 </div>
 
-                <div className="form-field">
-                  <label>Comments (optional)</label>
-                  <textarea rows={5} placeholder="Share your experience, what you liked, or suggestions for improvement..." value={comment} onChange={e => setComment(e.target.value)} />
+                <div className="flex flex-col gap-2">
+                  <label htmlFor="rate-comment" className="text-sm font-medium text-foreground">Comments (optional)</label>
+                  <Textarea
+                    id="rate-comment"
+                    rows={5}
+                    placeholder="Share your experience, what you liked, or suggestions for improvement"
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                  />
                 </div>
 
                 {selectedCourse && hasRated(selected.id, selectedCourse) && (
-                  <div className="already-rated-notice">
-                    ⚠️ You've already rated this lecturer for this course. Submitting will update your previous rating.
+                  <div className="flex items-start gap-2 rounded-md border border-transparent bg-warning/10 px-3 py-2.5 text-sm text-warning">
+                    <AlertTriangle size={16} strokeWidth={2} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+                    <span>You&apos;ve already rated this lecturer for this course. Submitting will update your previous rating.</span>
                   </div>
                 )}
 
-                <button type="submit" className="btn btn-primary submit-btn" disabled={rating === 0 || !selectedCourse}>
-                  <Star size={16} /> Submit Rating
-                </button>
+                <Button type="submit" className="active:translate-y-px" disabled={rating === 0 || !selectedCourse}>
+                  <Star size={16} aria-hidden="true" /> Submit rating
+                </Button>
               </form>
             </>
           )}
-        </div>
+        </section>
       </div>
-
-      <style jsx>{`
-        .page-container { display: flex; flex-direction: column; gap: 1.5rem; }
-        .page-header h2 { font-size: 1.4rem; color: var(--text-main); margin-bottom: 0.2rem; }
-        .page-header p { color: var(--text-muted); font-size: 0.9rem; }
-
-        .rate-layout { display: grid; grid-template-columns: 320px 1fr; gap: 1.5rem; min-height: 400px; }
-
-        .lecturers-col { display: flex; flex-direction: column; gap: 0.75rem; }
-        .lecturer-card { padding: 1.25rem; display: flex; align-items: center; gap: 1rem; cursor: pointer; transition: all 0.2s; position: relative; overflow: hidden; }
-        .lecturer-card:hover { transform: translateY(-2px); }
-        .lecturer-card.active { border-color: var(--primary); background: rgba(0,121,107,0.04); }
-        .lec-avatar { width: 42px; height: 42px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; flex-shrink: 0; }
-        .lec-avatar.large { width: 52px; height: 52px; font-size: 1rem; }
-        .lec-body { flex: 1; min-width: 0; }
-        .lec-body strong { font-size: 0.9rem; color: var(--text-main); display: block; }
-        .lec-dept { font-size: 0.76rem; color: var(--primary); font-weight: 600; }
-        .lec-meta { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.25rem; }
-        .lec-courses { font-size: 0.75rem; color: var(--text-muted); }
-        .lec-avg { font-size: 0.75rem; color: #f0b429; font-weight: 600; }
-        .selected-indicator { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background: var(--primary); border-radius: 0 12px 12px 0; }
-
-        .rating-col { padding: 2rem; display: flex; flex-direction: column; }
-        .select-prompt, .success-screen { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; color: var(--text-muted); text-align: center; padding: 2rem; }
-        .select-prompt h3, .success-screen h3 { font-size: 1.2rem; color: var(--text-main); }
-        .select-prompt p, .success-screen p { font-size: 0.9rem; }
-
-        .form-header { margin-bottom: 1.75rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--card-border); }
-        .form-lec-info { display: flex; align-items: center; gap: 1rem; }
-        .form-lec-info h3 { font-size: 1.15rem; color: var(--text-main); margin-bottom: 0.2rem; }
-        .form-lec-info span { font-size: 0.82rem; color: var(--text-muted); }
-
-        .rating-form { display: flex; flex-direction: column; gap: 1.5rem; }
-        .form-field { display: flex; flex-direction: column; gap: 0.5rem; }
-        .form-field label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
-        .form-field select, .form-field textarea { padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--card-border); background: rgba(255,255,255,0.6); color: var(--text-main); font-family: inherit; font-size: 0.9rem; resize: none; transition: border-color 0.2s; }
-        [data-theme='dark'] .form-field select, [data-theme='dark'] .form-field textarea { background: rgba(17,24,39,0.5); }
-        .form-field select:focus, .form-field textarea:focus { outline: none; border-color: var(--primary); }
-
-        .star-rating-section { display: flex; flex-direction: column; gap: 0.6rem; }
-        .star-rating-section label { font-size: 0.85rem; font-weight: 600; color: var(--text-main); }
-        .stars { display: flex; gap: 0.25rem; }
-        .star-btn { background: transparent; border: none; font-size: 2rem; cursor: pointer; color: #d1d5db; transition: all 0.15s; line-height: 1; padding: 0 0.1rem; }
-        .star-btn.active { color: #f0b429; transform: scale(1.1); }
-        .rating-label { font-size: 0.88rem; font-weight: 600; color: var(--primary); }
-
-        .already-rated-notice { font-size: 0.83rem; color: var(--warning); background: rgba(217,119,6,0.08); border-left: 3px solid var(--warning); padding: 0.75rem 1rem; border-radius: 4px; }
-
-        .submit-btn { display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.85rem; font-size: 1rem; }
-        .submit-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
-        @media (max-width: 900px) { .rate-layout { grid-template-columns: 1fr; } }
-      `}</style>
-    </div>
+    </main>
   );
 }

@@ -2,10 +2,10 @@
 
 import LecturerSidebar from '@/components/LecturerSidebar';
 import ToastNotifier from '@/components/ToastNotifier';
-import adminImg from '@/ADMIN.jpg';
 import { useEffect } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useStore } from '@/store/useStore';
+import { Button } from '@/components/ui/button';
 import { Bell } from 'lucide-react';
 
 export default function LecturerLayout({ children }) {
@@ -33,10 +33,13 @@ export default function LecturerLayout({ children }) {
   // Single stable loading screen — no mounted/theme state so no blink
   if (!hasHydrated) {
     return (
-      <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1rem' }}>
-        <div style={{ width: 48, height: 48, border: '4px solid #4f46e5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <p style={{ fontSize: '0.7rem', fontWeight: 900, letterSpacing: '0.15em', color: '#475569', textTransform: 'uppercase' }}>Faculty Portal Loading...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
+        <div
+          className="h-8 w-8 animate-spin rounded-full border-2 border-muted border-t-primary"
+          role="status"
+          aria-label="Loading"
+        />
+        <p className="text-sm text-muted-foreground">Loading faculty portal…</p>
       </div>
     );
   }
@@ -48,56 +51,50 @@ export default function LecturerLayout({ children }) {
   const auditingUser = useStore.getState().auditingUser;
 
   return (
-    <div
-      className="dashboard-wrapper"
-      style={{ backgroundImage: `url(${adminImg.src})` }}
-    >
+    <div className="flex min-h-screen flex-col bg-background text-foreground animate-fade-in">
       {user?.role === 'admin' && auditingUser && (
-        <div className="audit-banner">
-          <div className="audit-info">
-            <div className="pulse-icon" />
-            <span>AUDIT MODE: Viewing as <strong>{auditingUser.name}</strong></span>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-warning/20 bg-warning/10 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-medium text-warning">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-warning" aria-hidden="true" />
+            <span>
+              Audit mode — viewing as <strong className="font-semibold">{auditingUser.name}</strong>
+            </span>
           </div>
-          <button
-            className="exit-audit-btn"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => { useStore.getState().setAuditingUser(null); router.push('/admin'); }}
           >
-            Return to Admin Panel
-          </button>
+            Return to admin panel
+          </Button>
         </div>
       )}
 
-      {/* Single overlay — CSS class on <html> handles light/dark, no JS flash */}
-      <div className="global-overlay" />
-
-      <div className="dashboard-layout-content">
+      <div className="flex flex-1">
         <LecturerSidebar />
-        <main className="dashboard-main" style={{ gap: '1.5rem' }}>
-          <div className="lecturer-topbar glass-panel">
-            <div className="topbar-left">
-              <span className="topbar-role-badge">🎓 Faculty Portal</span>
+        <main className="flex flex-1 flex-col gap-6 p-5 md:p-6">
+          <header className="flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-3 text-card-foreground shadow-sm">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-brand-green" aria-hidden="true" />
+              <span className="text-sm font-semibold text-foreground">Faculty portal</span>
             </div>
-            <div className="topbar-right" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <button
-                onClick={() => router.push('/lecturer/messages')}
-                style={{ position: 'relative', padding: '0.5rem', borderRadius: '50%', background: 'transparent', border: 'none', cursor: 'pointer', color: 'inherit' }}
-              >
-                <Bell size={20} />
-                {unreadCount > 0 && (
-                  <span style={{
-                    position: 'absolute', top: 0, right: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    height: 16, minWidth: 16, borderRadius: '50%',
-                    background: '#ef4444', color: 'white', fontSize: '0.6rem', fontWeight: 900,
-                    border: '2px solid white'
-                  }}>
-                    {unreadCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-          <div className="dashboard-content">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="relative rounded-full"
+              onClick={() => router.push('/lecturer/messages')}
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+            >
+              <Bell size={18} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-card bg-destructive px-1 text-[0.625rem] font-semibold tabular-nums text-destructive-foreground">
+                  {unreadCount}
+                </span>
+              )}
+            </Button>
+          </header>
+
+          <div className="flex-1">
             {children}
           </div>
         </main>

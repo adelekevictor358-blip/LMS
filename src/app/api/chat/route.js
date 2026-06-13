@@ -89,9 +89,13 @@ BEHAVIOURAL RULES:
       { role: "system", content: systemPrompt },
     ];
 
-    // Add conversation history
+    // Add conversation history. Mistral requires that, after the optional
+    // system message, the first turn be a user message and roles alternate.
+    // The ChatBot seeds a bot greeting, so trim any leading bot turns.
     const lastMsg = messages[messages.length - 1];
-    const history = messages.slice(0, -1);
+    let history = messages.slice(0, -1);
+    const firstUserIdx = history.findIndex(m => m.sender === "user");
+    history = firstUserIdx === -1 ? [] : history.slice(firstUserIdx);
 
     for (const msg of history) {
       if (msg.sender === "user") {

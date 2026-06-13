@@ -2,12 +2,11 @@
 
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
-import { 
-  Users, Search, Filter, Download, MoreHorizontal, 
-  Mail, Phone, GraduationCap, ChevronRight, CheckCircle2, 
-  Clock, AlertCircle, TrendingUp, BookOpen 
+import {
+  Users, Search, Download, MoreHorizontal,
+  Mail, CheckCircle2, TrendingUp
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +16,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export default function LecturerStudents() {
   const { getAllUsers, courses, user } = useStore();
   const allUsers = getAllUsers();
-  const students = allUsers.filter(u => u.role === 'student');
+  const myCourseIds = courses.filter(c => c.lecturerId === user?.id).map(c => c.id);
+  const students = allUsers.filter(u => u.role === 'student' && u.enrolledCourseIds?.some(id => myCourseIds.includes(id)));
   const [searchTerm, setSearchTerm] = useState('');
   const [levelFilter, setLevelFilter] = useState('all');
 
@@ -28,110 +28,122 @@ export default function LecturerStudents() {
   });
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-8 rounded-2xl border shadow-sm">
-        <div>
-           <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="text-blue-600" /> Cohort Management
-           </h1>
-           <p className="text-slate-500 mt-1 font-medium">Monitor student performance and manage academic records for your courses.</p>
+      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between rounded-xl border border-border bg-card p-6 shadow-sm">
+        <div className="space-y-1">
+          <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+            Cohort management
+          </h1>
+          <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+            Monitor student performance and manage academic records for your courses.
+          </p>
         </div>
-        <div className="flex gap-3">
-           <Button variant="outline" className="font-bold">
-              <Download size={16} className="mr-2" /> Export Roster
-           </Button>
-           <Button className="bg-blue-600 hover:bg-blue-700 font-bold">Register New Student</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline">
+            <Download size={16} /> Export roster
+          </Button>
+          <Button>Register new student</Button>
         </div>
-      </div>
+      </header>
 
       {/* Analytics Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         <MetricCard label="Active Students" value={students.length} sub="Across all levels" icon={<Users />} />
-         <MetricCard label="Average GPA" value="3.42" sub="Institutional cohort avg" icon={<TrendingUp />} />
-         <MetricCard label="Program Sync" value="94%" sub="Enrollment completion" icon={<CheckCircle2 />} />
-      </div>
+      <section className="grid grid-cols-1 gap-5 md:grid-cols-3">
+        <MetricCard label="Active students" value={students.length} sub="Across all levels" icon={<Users size={18} strokeWidth={1.5} />} />
+        <MetricCard label="Average GPA" value="3.42" sub="Institutional cohort avg" icon={<TrendingUp size={18} strokeWidth={1.5} />} />
+        <MetricCard label="Program sync" value="94%" sub="Enrollment completion" icon={<CheckCircle2 size={18} strokeWidth={1.5} />} />
+      </section>
 
       {/* Main Content */}
-      <Card className="border shadow-sm overflow-hidden">
-        <CardHeader className="p-6 bg-slate-50/50 dark:bg-slate-800/30 border-b">
-           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-              <div className="relative w-full max-w-md">
-                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                 <Input 
-                   placeholder="Search by name or Matric No..." 
-                   className="pl-10 h-10 rounded-xl"
-                   value={searchTerm}
-                   onChange={(e) => setSearchTerm(e.target.value)}
-                 />
-              </div>
-              <div className="flex gap-2">
-                 {['all', '100L', '200L', '300L'].map(lvl => (
-                    <Button 
-                      key={lvl} 
-                      variant={levelFilter === lvl ? "default" : "outline"} 
-                      size="sm"
-                      className={`h-9 px-4 rounded-lg font-bold text-[10px] uppercase tracking-widest ${levelFilter === lvl ? 'bg-blue-600' : ''}`}
-                      onClick={() => setLevelFilter(lvl)}
-                    >
-                      {lvl === 'all' ? 'All Levels' : lvl}
-                    </Button>
-                 ))}
-              </div>
-           </div>
+      <Card className="overflow-hidden border-border shadow-sm">
+        <CardHeader className="border-b border-border bg-muted/40 p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="relative w-full max-w-md">
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search by name or matric number"
+                className="pl-9"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {['all', '100L', '200L', '300L'].map(lvl => (
+                <Button
+                  key={lvl}
+                  variant={levelFilter === lvl ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setLevelFilter(lvl)}
+                >
+                  {lvl === 'all' ? 'All levels' : lvl}
+                </Button>
+              ))}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
-           <Table>
-              <TableHeader>
-                 <TableRow className="bg-slate-50/50 dark:bg-slate-800/10">
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest py-4 pl-6">Student Identity</TableHead>
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest">Academic Level</TableHead>
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest">Matric Number</TableHead>
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest">Enrolled Courses</TableHead>
-                    <TableHead className="font-bold text-[10px] uppercase tracking-widest">Performance</TableHead>
-                    <TableHead className="text-right py-4 pr-6">Actions</TableHead>
-                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                 {filteredStudents.length === 0 ? (
-                    <TableRow>
-                       <TableCell colSpan={6} className="h-64 text-center opacity-40 italic font-medium">No student records match the current filter.</TableCell>
-                    </TableRow>
-                 ) : (
-                    filteredStudents.map((s, i) => (
-                       <TableRow key={i} className="hover:bg-slate-50 transition-colors">
-                          <TableCell className="py-4 pl-6">
-                             <div className="flex items-center gap-3">
-                                <Avatar className="h-9 w-9 border border-slate-200">
-                                   <AvatarFallback className="bg-slate-100 text-slate-600 font-bold text-xs">{s.avatar}</AvatarFallback>
-                                </Avatar>
-                                <span className="font-bold text-slate-900 dark:text-white">{s.name}</span>
-                             </div>
-                          </TableCell>
-                          <TableCell>
-                             <Badge variant="outline" className="font-bold bg-blue-50/50 border-blue-200 text-blue-600">{s.level}</Badge>
-                          </TableCell>
-                          <TableCell className="font-medium text-slate-500 uppercase text-xs">{s.matNo || 'MT-99420'}</TableCell>
-                          <TableCell className="font-bold text-slate-900 dark:text-white">{(s.enrolledCourseIds?.length || 0) + 4}</TableCell>
-                          <TableCell>
-                             <div className="flex items-center gap-2">
-                                <div className="h-2 w-16 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                   <div className="h-full bg-green-500 rounded-full" style={{ width: '85%' }} />
-                                </div>
-                                <span className="text-[10px] font-bold text-slate-500">85%</span>
-                             </div>
-                          </TableCell>
-                          <TableCell className="text-right py-4 pr-6">
-                             <div className="flex justify-end gap-2">
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600 hover:bg-blue-50"><Mail size={16} /></Button>
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400"><MoreHorizontal size={16} /></Button>
-                             </div>
-                          </TableCell>
-                       </TableRow>
-                    ))
-                 )}
-              </TableBody>
-           </Table>
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/40">
+                <TableHead className="py-3 pl-6 text-xs font-medium text-muted-foreground">Student</TableHead>
+                <TableHead className="text-xs font-medium text-muted-foreground">Academic level</TableHead>
+                <TableHead className="text-xs font-medium text-muted-foreground">Matric number</TableHead>
+                <TableHead className="text-xs font-medium text-muted-foreground">Enrolled courses</TableHead>
+                <TableHead className="text-xs font-medium text-muted-foreground">Performance</TableHead>
+                <TableHead className="py-3 pr-6 text-right text-xs font-medium text-muted-foreground">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredStudents.length === 0 ? (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={6} className="h-64">
+                    <div className="flex flex-col items-center justify-center gap-3 text-center">
+                      <Users size={28} strokeWidth={1.5} className="text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">No student records match the current filter.</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredStudents.map((s, i) => (
+                  <TableRow key={i} className="transition-colors hover:bg-muted/50">
+                    <TableCell className="py-4 pl-6">
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-9 w-9 border border-border">
+                          <AvatarFallback className="bg-muted text-xs font-medium text-muted-foreground">{s.avatar}</AvatarFallback>
+                        </Avatar>
+                        <span className="font-medium text-foreground">{s.name}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="font-medium">{s.level}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs font-medium uppercase tabular-nums text-muted-foreground">{s.matNo || 'MT-99420'}</TableCell>
+                    <TableCell className="font-medium tabular-nums text-foreground">{(s.enrolledCourseIds?.length || 0) + 4}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="h-2 w-16 overflow-hidden rounded-full bg-muted">
+                          <div className="h-full rounded-full bg-success" style={{ width: '85%' }} />
+                        </div>
+                        <span className="text-xs font-medium tabular-nums text-muted-foreground">85%</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-4 pr-6 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                          <Mail size={16} />
+                          <span className="sr-only">Email {s.name}</span>
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                          <MoreHorizontal size={16} />
+                          <span className="sr-only">More actions for {s.name}</span>
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
@@ -140,19 +152,19 @@ export default function LecturerStudents() {
 
 function MetricCard({ label, value, sub, icon }) {
   return (
-    <Card className="border shadow-sm overflow-hidden">
-       <CardContent className="p-6">
-          <div className="flex justify-between items-start">
-             <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-1">{label}</p>
-                <p className="text-3xl font-black text-slate-900 dark:text-white">{value}</p>
-                <p className="text-[10px] font-medium text-slate-500 mt-2 italic">{sub}</p>
-             </div>
-             <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-blue-600 opacity-60">
-                {icon}
-             </div>
+    <Card className="border-border shadow-sm">
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="text-2xl font-semibold tabular-nums text-foreground">{value}</p>
+            <p className="text-xs text-muted-foreground">{sub}</p>
           </div>
-       </CardContent>
+          <div className="rounded-md bg-muted p-2.5 text-muted-foreground">
+            {icon}
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { nextSession, nextLevel } from '@/lib/utils';
 
 const ACADEMIC_STRUCTURE = {
   colleges: [
@@ -62,6 +63,8 @@ export const useStore = create(
         excludedIds: [],
         liveSessions: [],
         scheduledSessions: [], // Future engagements
+        currentSession: '2025/2026',
+        sessionHistory: [],
         auditingUser: null,
         _hasHydrated: false,
         setHasHydrated: (val) => set({ _hasHydrated: val }),
@@ -75,7 +78,7 @@ export const useStore = create(
           const allUsers = get().getAllUsers();
           const foundUser = allUsers.find(u => u.email === email && u.password === password);
           if (foundUser) {
-            if (foundUser.status === 'dormant') {
+            if (foundUser.status && foundUser.status !== 'active') {
               return { success: false, error: 'Your account is currently dormant/suspended. Please contact IT admin.' };
             }
             
@@ -323,10 +326,10 @@ export const useStore = create(
 
         // Assignments
         assignments: [
-          { id: 1, courseId: 1, title: 'Newton\'s Laws Problem Set', description: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', dueDate: new Date(Date.now() + 86400000 * 3).toISOString(), maxScore: 50, createdBy: 'lecturer-1', status: 'active' },
-          { id: 2, courseId: 2, title: 'Build a Responsive Webpage', description: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', dueDate: new Date(Date.now() + 86400000 * 7).toISOString(), maxScore: 100, createdBy: 'lecturer-2', status: 'active' },
-          { id: 3, courseId: 3, title: 'Essay: Academic Communication', description: 'Write a 500-word essay on the importance of academic integrity in university education.', dueDate: new Date(Date.now() - 86400000 * 1).toISOString(), maxScore: 50, createdBy: 'lecturer-1', status: 'closed' },
-          { id: 4, courseId: 5, title: 'Circuit Analysis Report', description: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', dueDate: new Date(Date.now() + 86400000 * 5).toISOString(), maxScore: 75, createdBy: 'lecturer-1', status: 'active' },
+          { id: 1, courseId: 1, title: 'Newton\'s Laws Problem Set', description: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', dueDate: new Date(Date.now() + 86400000 * 3).toISOString(), maxScore: 50, createdBy: 'LEC/2024/001', status: 'active' },
+          { id: 2, courseId: 2, title: 'Build a Responsive Webpage', description: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', dueDate: new Date(Date.now() + 86400000 * 7).toISOString(), maxScore: 100, createdBy: 'LEC/2024/001', status: 'active' },
+          { id: 3, courseId: 3, title: 'Essay: Academic Communication', description: 'Write a 500-word essay on the importance of academic integrity in university education.', dueDate: new Date(Date.now() - 86400000 * 1).toISOString(), maxScore: 50, createdBy: 'LEC/2024/001', status: 'closed' },
+          { id: 4, courseId: 1, title: 'Circuit Analysis Report', description: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', dueDate: new Date(Date.now() + 86400000 * 5).toISOString(), maxScore: 75, createdBy: 'LEC/2024/001', status: 'active' },
         ],
 
         // Student submissions
@@ -338,7 +341,7 @@ export const useStore = create(
         quizzes: [
           {
             id: 1, courseId: 1, title: 'PHY104 Week 3 Quiz', description: 'Test your understanding of Newton\'s Laws',
-            createdBy: 'lecturer-1', status: 'active', timeLimit: 15,
+            createdBy: 'LEC/2024/001', status: 'active', timeLimit: 15,
             questions: [
               { id: 1, type: 'mcq', question: 'Which of Newton\'s laws states that every action has an equal and opposite reaction?', options: ['First Law', 'Second Law', 'Third Law', 'Law of Gravitation'], correct: 2 },
               { id: 2, type: 'mcq', question: 'What is the SI unit of force?', options: ['Joule', 'Newton', 'Watt', 'Pascal'], correct: 1 },
@@ -349,7 +352,7 @@ export const useStore = create(
           },
           {
             id: 2, courseId: 2, title: 'ICT102 HTML/CSS Quiz', description: 'Basic web technologies assessment',
-            createdBy: 'lecturer-2', status: 'active', timeLimit: 20,
+            createdBy: 'LEC/2024/001', status: 'active', timeLimit: 20,
             questions: [
               { id: 1, type: 'mcq', question: 'What does HTML stand for?', options: ['HyperText Markup Language', 'High Text Machine Language', 'HyperText Machine Language', 'HyperTool Mark Language'], correct: 0 },
               { id: 2, type: 'mcq', question: 'Which CSS property is used for text color?', options: ['font-color', 'text-color', 'color', 'foreground'], correct: 2 },
@@ -379,7 +382,7 @@ export const useStore = create(
 
         // Lecturer ratings from students
         lecturerRatings: [
-          { id: 1, lecturerId: 'lecturer-1', studentId: 'student-1', courseId: 1, rating: 4, comment: 'Very clear explanations. Would appreciate more practical examples.', date: '2026-04-10' },
+          { id: 1, lecturerId: 'LEC/2024/001', studentId: 'student-1', courseId: 1, rating: 4, comment: 'Very clear explanations. Would appreciate more practical examples.', date: '2026-04-10' },
         ],
 
         // Broadcast announcements
@@ -523,9 +526,11 @@ export const useStore = create(
         },
         joinLiveSession: (sessionId, userId, userName) => {
           set(state => ({
-            liveSessions: state.liveSessions.map(s => 
-              s.id === sessionId 
-                ? { ...s, participants: [...(s.participants || []), { id: userId, name: userName, role: 'Student', joinTime: new Date().toISOString() }] }
+            liveSessions: state.liveSessions.map(s =>
+              s.id === sessionId
+                ? (s.participants || []).some(p => p.id === userId)
+                  ? s
+                  : { ...s, participants: [...(s.participants || []), { id: userId, name: userName, role: 'Student', joinTime: new Date().toISOString() }] }
                 : s
             )
           }));
@@ -548,10 +553,12 @@ export const useStore = create(
           set(state => ({
             liveSessions: state.liveSessions.map(s => 
               s.id === sessionId 
-                ? { 
-                    ...s, 
+                ? {
+                    ...s,
                     waitingParticipants: (s.waitingParticipants || []).filter(p => p.userId !== userId),
-                    participants: [...(s.participants || []), { name: participant.name, id: userId, joinTime: new Date().toISOString() }]
+                    participants: (s.participants || []).some(p => p.id === userId)
+                      ? (s.participants || [])
+                      : [...(s.participants || []), { name: participant.name, id: userId, joinTime: new Date().toISOString() }]
                   }
                 : s
             )
@@ -667,11 +674,14 @@ export const useStore = create(
           };
           set((state) => ({ messages: [...state.messages, newMsg] }));
         },
-        markMessagesRead: (fromId) => set((state) => ({
-          messages: state.messages.map(m =>
-            m.from === fromId ? { ...m, read: true } : m
-          )
-        })),
+        markMessagesRead: (fromId) => {
+          const { user } = get();
+          set((state) => ({
+            messages: state.messages.map(m =>
+              m.from === fromId && m.to === user?.id ? { ...m, read: true } : m
+            )
+          }));
+        },
 
         // ─── BROADCAST ACTIONS ───
         sendLecturerBroadcast: (data) => {
@@ -709,6 +719,39 @@ export const useStore = create(
         adminViewAs: null,
         setAdminViewAs: (role) => set({ adminViewAs: role }),
 
+        // ─── ACADEMIC SESSION ───
+        // Provision the next academic session: roll the session forward and advance
+        // every student one level (final-year students graduate). Promoted students
+        // start with a clean registration so they re-register for their new level.
+        advanceAcademicSession: () => {
+          const promote = (u) => {
+            if (!u || u.role !== 'student' || u.level === 'Graduated') return u;
+            const newLevel = nextLevel(u.level);
+            return {
+              ...u,
+              level: newLevel,
+              enrolledCourseIds: [],
+              graduated: newLevel === 'Graduated' ? true : (u.graduated || false),
+            };
+          };
+          const current = get().currentSession;
+          const session = nextSession(current);
+          set((state) => {
+            const promotedCount = state.dynamicUsers.filter(u => u.role === 'student' && u.level !== 'Graduated').length;
+            return {
+              currentSession: session,
+              sessionHistory: [...(state.sessionHistory || []), { session: current, closedAt: new Date().toISOString(), promoted: promotedCount }],
+              dynamicUsers: state.dynamicUsers.map(promote),
+              user: state.user?.role === 'student' ? promote(state.user) : state.user,
+              notifications: [
+                { id: Date.now(), text: `A new academic session (${session}) has begun. You have been moved to your new level — please register your courses.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+                ...state.notifications,
+              ],
+            };
+          });
+          return { newSession: session };
+        },
+
         addUser: (userData) => {
           const allUsers = get().getAllUsers();
           const targetId = (userData.role === 'student' ? userData.matNo : userData.staffId);
@@ -739,6 +782,7 @@ export const useStore = create(
 
           const newUser = {
             ...userData,
+            level: userData.role === 'student' ? (userData.level || '100L') : userData.level,
             id: storedId || (userData.role + '-' + Date.now()),
             matNo: targetId,
             password: surname,
@@ -845,30 +889,37 @@ export const useStore = create(
         },
 
         enrollInCourse: (courseId) => {
-          const { user } = get();
+          const state = get();
+          const { user } = state;
           if (!user || user.role !== 'student') return;
-          
-          const enrolledIds = user.enrolledCourseIds || [];
-          if (enrolledIds.includes(courseId)) return;
-          
-          const newUser = { ...user, enrolledCourseIds: [...enrolledIds, courseId] };
-          
-          set((state) => ({
+
+          // Students may only self-register for courses at their own level.
+          // Other levels are read-only on the registration page.
+          const course = state.courses.find(c => c.id === courseId);
+          if (!course || (course.level && user.level && course.level !== user.level)) return;
+
+          // Materialize the implicit program+level registration the first time the
+          // student curates it, so add/drop stays coherent with what they see.
+          const baseIds = state.getStudentCourseIds(user);
+          if (baseIds.includes(courseId)) return;
+
+          const newUser = { ...user, enrolledCourseIds: [...baseIds, courseId] };
+          set((s) => ({
             user: newUser,
-            dynamicUsers: state.dynamicUsers.map(u => u.id === user.id ? newUser : u)
+            dynamicUsers: s.dynamicUsers.map(u => u.id === user.id ? newUser : u)
           }));
         },
 
         unenrollFromCourse: (courseId) => {
-          const { user } = get();
+          const state = get();
+          const { user } = state;
           if (!user || user.role !== 'student') return;
-          
-          const enrolledIds = user.enrolledCourseIds || [];
-          const newUser = { ...user, enrolledCourseIds: enrolledIds.filter(id => id !== courseId) };
-          
-          set((state) => ({
+
+          const baseIds = state.getStudentCourseIds(user);
+          const newUser = { ...user, enrolledCourseIds: baseIds.filter(id => id !== courseId) };
+          set((s) => ({
             user: newUser,
-            dynamicUsers: state.dynamicUsers.map(u => u.id === user.id ? newUser : u)
+            dynamicUsers: s.dynamicUsers.map(u => u.id === user.id ? newUser : u)
           }));
         },
 
@@ -897,19 +948,37 @@ export const useStore = create(
            }));
         },
 
+        // ─── STUDENT COURSE SELECTORS (single source of truth) ───
+        // A student's courses = their explicit registration (enrolledCourseIds),
+        // or, until they register, the catalogue for their program + level.
+        // Every page MUST derive a student's courses from these, not ad-hoc filters.
+        getStudentCourseIds: (targetUser) => {
+          const state = get();
+          const u = targetUser || state.user;
+          if (!u || u.role !== 'student') return [];
+          if (u.enrolledCourseIds?.length) return u.enrolledCourseIds;
+          return state.courses
+            .filter(c => c.program === u.program && c.level === u.level)
+            .map(c => c.id);
+        },
+        getStudentCourses: (targetUser) => {
+          const state = get();
+          const ids = state.getStudentCourseIds(targetUser);
+          return state.courses.filter(c => ids.includes(c.id));
+        },
+
         // ─── ANALYTICS HELPERS ───
         getLecturerModules: (lecturerId) => {
           return get().courses.filter(c => c.lecturerId === lecturerId);
         },
         getModuleEnrolmentCount: (courseId) => {
-          const allUsers = get().getAllUsers();
-          return allUsers.filter(u => u.role === 'student' && u.enrolledCourseIds?.includes(courseId)).length;
+          const state = get();
+          return state.getAllUsers().filter(u => u.role === 'student' && state.getStudentCourseIds(u).includes(courseId)).length;
         },
         getLecturerTotalStudents: (lecturerId) => {
-          const myCourses = get().getLecturerModules(lecturerId);
-          const myCourseIds = myCourses.map(c => c.id);
-          const allUsers = get().getAllUsers();
-          return allUsers.filter(u => u.role === 'student' && u.enrolledCourseIds?.some(id => myCourseIds.includes(id))).length;
+          const state = get();
+          const myCourseIds = state.getLecturerModules(lecturerId).map(c => c.id);
+          return state.getAllUsers().filter(u => u.role === 'student' && state.getStudentCourseIds(u).some(id => myCourseIds.includes(id))).length;
         },
         getRecentSubmissions: (lecturerId, limit = 5) => {
           const { assignments, submissions, courses } = get();
@@ -965,13 +1034,18 @@ export const useStore = create(
       onRehydrateStorage: () => (state) => {
         if (state) state.setHasHydrated(true);
       },
-      // Only persist dynamic/user-specific data — static datasets stay in code.
-      // Courses are NOT persisted so the source-of-truth (code) always wins.
-      // Dynamic course additions (admin-created ones) are ephemeral by design.
+      // Persist dynamic/user-specific data. Seed courses stay in code (source of
+      // truth), but we persist `courses` so admin/lecturer-created courses — and
+      // any student enrolment in them — survive a reload instead of dangling.
+      // The custom merge below keeps seed courses authoritative and re-applies
+      // only the runtime-created (non-seed) ones.
       partialize: (state) => ({
         user: state.user,
         dynamicUsers: state.dynamicUsers,
         excludedIds: state.excludedIds,
+        courses: state.courses,
+        currentSession: state.currentSession,
+        sessionHistory: state.sessionHistory,
         liveSessions: state.liveSessions,
         scheduledSessions: state.scheduledSessions,
         auditingUser: state.auditingUser,
@@ -986,6 +1060,18 @@ export const useStore = create(
         callHistory: state.callHistory,
         materials: state.materials,
       }),
+      merge: (persisted, current) => {
+        const p = persisted || {};
+        // Seed courses always come from code; preserve only runtime-created
+        // (non-seed) courses from storage so enrolments in them don't dangle.
+        const seedIds = new Set(current.courses.map(c => c.id));
+        const dynamicCourses = (p.courses || []).filter(c => !seedIds.has(c.id));
+        return {
+          ...current,
+          ...p,
+          courses: [...current.courses, ...dynamicCourses],
+        };
+      },
     }
   )
 );

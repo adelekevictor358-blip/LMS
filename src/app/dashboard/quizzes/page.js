@@ -2,28 +2,31 @@
 
 import { useStore } from '@/store/useStore';
 import { useState, useEffect, useRef } from 'react';
-import { HelpCircle, CheckCircle2, XCircle, Clock, Trophy, Play } from 'lucide-react';
+import { HelpCircle, CheckCircle2, XCircle, Clock, FileText, Play } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 
 export default function StudentQuizzes() {
-  const { user, courses, quizzes, quizResults, submitQuizResult } = useStore();
+  const { user, courses, quizzes, quizResults, submitQuizResult, getStudentCourses } = useStore();
   const [takingQuiz, setTakingQuiz] = useState(null);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState(null);
   const [timeLeft, setTimeLeft] = useState(0);
   const timerRef = useRef(null);
+  const answersRef = useRef({});
 
   const myResults = quizResults.filter(r => r.studentId === user?.id);
   const hasAttempted = (quizId) => myResults.some(r => r.quizId === quizId);
   const getResult = (quizId) => myResults.find(r => r.quizId === quizId);
 
-  const myCourses = courses.filter(c => c.level === user?.level);
+  const myCourses = getStudentCourses(user);
   const myCourseIds = myCourses.map(c => c.id);
   const myQuizzes = quizzes.filter(q => myCourseIds.includes(q.courseId));
 
   const startQuiz = (quiz) => {
     setTakingQuiz(quiz);
-    setAnswers({});
+    setAnswers({}); answersRef.current = {};
     setSubmitted(false);
     setResult(null);
     setTimeLeft(quiz.timeLimit * 60);
@@ -44,10 +47,11 @@ export default function StudentQuizzes() {
   const handleSubmitQuiz = () => {
     clearInterval(timerRef.current);
     if (!takingQuiz) return;
+    const latest = answersRef.current;
     const score = takingQuiz.questions.reduce((acc, q, idx) => {
-      return answers[idx] === q.correct ? acc + 1 : acc;
+      return latest[idx] === q.correct ? acc + 1 : acc;
     }, 0);
-    submitQuizResult(takingQuiz.id, answers, score);
+    submitQuizResult(takingQuiz.id, latest, score);
     setResult({ score, total: takingQuiz.questions.length });
     setSubmitted(true);
   };
@@ -59,191 +63,223 @@ export default function StudentQuizzes() {
   };
 
   return (
-    <div className="page-container animate-fade-in">
-      <div className="page-header">
-        <div>
-          <h2>Quizzes & Self-Assessment</h2>
-          <p>Test your knowledge and track your academic progress.</p>
-        </div>
-      </div>
+    <div className="animate-fade-in space-y-6">
+      <header className="space-y-1">
+        <h2 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+          Quizzes and self-assessment
+        </h2>
+        <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+          Test your knowledge and track your academic progress.
+        </p>
+      </header>
 
-      {/* Quiz in Progress */}
+      {/* Quiz in progress */}
       {takingQuiz && (
-        <div className="modal-overlay">
-          <div className="quiz-modal glass-panel">
-            <div className="quiz-modal-header">
-              <div className="quiz-modal-title">
-                <HelpCircle size={20} color="var(--primary)" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-y-auto rounded-xl border border-border bg-card text-card-foreground shadow-lg">
+            <header className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-border bg-card px-6 py-5">
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                  <HelpCircle size={18} />
+                </span>
                 <div>
-                  <h3>{takingQuiz.title}</h3>
-                  <span>{takingQuiz.questions.length} questions</span>
+                  <h3 className="text-lg font-semibold leading-tight text-foreground">{takingQuiz.title}</h3>
+                  <span className="text-xs text-muted-foreground">{takingQuiz.questions.length} questions</span>
                 </div>
               </div>
-              <div className={`quiz-timer ${timeLeft < 60 ? 'urgent' : ''}`}>
+              <div
+                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold tabular-nums ${
+                  timeLeft < 60
+                    ? 'bg-destructive/10 text-destructive animate-pulse'
+                    : 'bg-muted text-foreground'
+                }`}
+              >
                 <Clock size={16} /> {formatTime(timeLeft)}
               </div>
-            </div>
+            </header>
 
             {!submitted ? (
-              <div className="quiz-questions">
+              <div className="flex flex-col gap-6 px-6 py-6">
                 {takingQuiz.questions.map((q, qIdx) => (
-                  <div key={q.id} className="question-card">
-                    <div className="q-label">Question {qIdx + 1} of {takingQuiz.questions.length}</div>
-                    <p className="q-text">{q.question}</p>
-                    <div className="options-list">
-                      {q.options.map((opt, oIdx) => (
-                        <label key={oIdx} className={`option-label ${answers[qIdx] === oIdx ? 'selected' : ''}`}>
-                          <input type="radio" name={`q-${qIdx}`} checked={answers[qIdx] === oIdx} onChange={() => setAnswers(a => ({ ...a, [qIdx]: oIdx }))} />
-                          <span className="opt-letter">{String.fromCharCode(65 + oIdx)}</span>
-                          <span>{opt}</span>
-                        </label>
-                      ))}
+                  <div key={q.id} className="rounded-xl border border-border bg-muted/30 p-5">
+                    <div className="mb-2 text-xs font-medium text-muted-foreground">
+                      Question {qIdx + 1} of {takingQuiz.questions.length}
+                    </div>
+                    <p className="mb-4 text-sm font-medium leading-relaxed text-foreground text-pretty">{q.question}</p>
+                    <div className="flex flex-col gap-2">
+                      {q.options.map((opt, oIdx) => {
+                        const selected = answers[qIdx] === oIdx;
+                        return (
+                          <label
+                            key={oIdx}
+                            className={`flex cursor-pointer items-center gap-3 rounded-md border p-3 text-sm transition-colors focus-within:ring-1 focus-within:ring-ring ${
+                              selected
+                                ? 'border-primary bg-primary/5 text-foreground'
+                                : 'border-border text-foreground hover:border-primary/40 hover:bg-accent'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name={`q-${qIdx}`}
+                              checked={selected}
+                              onChange={() => setAnswers(a => { const next = { ...a, [qIdx]: oIdx }; answersRef.current = next; return next; })}
+                              className="sr-only"
+                            />
+                            <span
+                              className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
+                                selected
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-border text-muted-foreground'
+                              }`}
+                            >
+                              {String.fromCharCode(65 + oIdx)}
+                            </span>
+                            <span>{opt}</span>
+                          </label>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
-                <div className="quiz-submit-area">
-                  <span className="answered-count">{Object.keys(answers).length}/{takingQuiz.questions.length} answered</span>
-                  <button className="btn btn-primary" onClick={handleSubmitQuiz}>
-                    <CheckCircle2 size={16} /> Submit Quiz
-                  </button>
+                <div className="flex items-center justify-between border-t border-border pt-4">
+                  <span className="text-sm text-muted-foreground tabular-nums">
+                    {Object.keys(answers).length}/{takingQuiz.questions.length} answered
+                  </span>
+                  <Button onClick={handleSubmitQuiz}>
+                    <CheckCircle2 size={16} /> Submit quiz
+                  </Button>
                 </div>
               </div>
             ) : (
-              <div className="quiz-result-screen">
-                <div className={`result-circle ${(result.score / result.total) >= 0.7 ? 'pass' : 'fail'}`}>
-                  <Trophy size={36} />
-                  <span className="result-score">{result.score}/{result.total}</span>
-                  <span className="result-pct">{Math.round((result.score / result.total) * 100)}%</span>
-                </div>
-                <h3>{(result.score / result.total) >= 0.7 ? '🎉 Great job!' : '📚 Keep studying!'}</h3>
-                <p>You scored {result.score} out of {result.total} questions correctly.</p>
-                <div className="result-breakdown">
-                  {takingQuiz.questions.map((q, qIdx) => (
-                    <div key={q.id} className={`result-row ${answers[qIdx] === q.correct ? 'correct' : 'wrong'}`}>
-                      <div className="result-icon">{answers[qIdx] === q.correct ? <CheckCircle2 size={15} /> : <XCircle size={15} />}</div>
-                      <div className="result-q">{q.question}</div>
-                      <div className="result-ans">
-                        {answers[qIdx] !== q.correct && <span className="your-ans">You: {q.options[answers[qIdx]] || 'N/A'}</span>}
-                        <span className="correct-ans">✓ {q.options[q.correct]}</span>
+              <div className="flex flex-col items-center gap-5 px-6 py-8">
+                {(() => {
+                  const passed = (result.score / result.total) >= 0.7;
+                  return (
+                    <>
+                      <div
+                        className={`flex h-32 w-32 flex-col items-center justify-center gap-0.5 rounded-full border ${
+                          passed
+                            ? 'border-success/30 bg-success/10 text-success'
+                            : 'border-warning/30 bg-warning/10 text-warning'
+                        }`}
+                      >
+                        <span className="text-2xl font-semibold tabular-nums">{result.score}/{result.total}</span>
+                        <span className="text-sm font-medium tabular-nums">
+                          {Math.round((result.score / result.total) * 100)}%
+                        </span>
                       </div>
-                    </div>
-                  ))}
+                      <div className="space-y-1 text-center">
+                        <h3 className="text-lg font-semibold text-foreground">
+                          {passed ? 'Well done' : 'Keep studying'}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          You scored {result.score} out of {result.total} questions correctly.
+                        </p>
+                      </div>
+                    </>
+                  );
+                })()}
+                <div className="flex max-h-72 w-full flex-col gap-2 overflow-y-auto">
+                  {takingQuiz.questions.map((q, qIdx) => {
+                    const correct = answers[qIdx] === q.correct;
+                    return (
+                      <div
+                        key={q.id}
+                        className={`flex items-start gap-3 rounded-md border p-3 text-sm ${
+                          correct
+                            ? 'border-success/30 bg-success/5'
+                            : 'border-destructive/30 bg-destructive/5'
+                        }`}
+                      >
+                        <span className={`mt-0.5 shrink-0 ${correct ? 'text-success' : 'text-destructive'}`}>
+                          {correct ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+                        </span>
+                        <div className="flex-1 leading-snug text-foreground text-pretty">{q.question}</div>
+                        <div className="flex flex-col gap-0.5 text-right">
+                          {!correct && (
+                            <span className="text-xs text-destructive">
+                              You: {q.options[answers[qIdx]] || 'N/A'}
+                            </span>
+                          )}
+                          <span className="text-xs font-medium text-success">
+                            {q.options[q.correct]}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <button className="btn btn-primary" onClick={() => setTakingQuiz(null)}>Close</button>
+                <Button variant="outline" onClick={() => setTakingQuiz(null)}>Close</Button>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Quizzes Grid */}
-      <div className="quizzes-grid">
-        {myQuizzes.length === 0 ? (
-          <div className="empty-full glass-panel"><HelpCircle size={40} /><p>No quizzes available for your level yet.</p></div>
-        ) : (
-          myQuizzes.map(quiz => {
+      {/* Quizzes grid */}
+      {myQuizzes.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-16 text-center">
+          <HelpCircle size={40} strokeWidth={1.5} className="text-muted-foreground" />
+          <p className="text-sm text-muted-foreground">No quizzes are available for your level yet.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {myQuizzes.map(quiz => {
             const course = courses.find(c => c.id === quiz.courseId);
             const attempted = hasAttempted(quiz.id);
             const myResult = getResult(quiz.id);
             const pct = myResult ? Math.round((myResult.score / quiz.questions.length) * 100) : null;
             return (
-              <div key={quiz.id} className="quiz-card glass-panel">
-                <div className="quiz-top">
-                  <div className="quiz-icon-wrap">
-                    <HelpCircle size={22} color="var(--primary)" />
-                  </div>
-                  {course && <span className="course-tag" style={{ background: course.color + '22', color: course.color }}>{course.code}</span>}
+              <div
+                key={quiz.id}
+                className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-sm transition-colors hover:border-primary/40"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <HelpCircle size={18} />
+                  </span>
+                  {course && (
+                    <Badge variant="outline" className="gap-1.5 font-medium">
+                      <span
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: course.color }}
+                        aria-hidden="true"
+                      />
+                      {course.code}
+                    </Badge>
+                  )}
                 </div>
-                <h4>{quiz.title}</h4>
-                <p className="quiz-desc">{quiz.description}</p>
-                <div className="quiz-info">
-                  <span><Clock size={13} /> {quiz.timeLimit} min</span>
-                  <span>📝 {quiz.questions.length} questions</span>
+                <h4 className="text-base font-semibold leading-snug text-foreground">{quiz.title}</h4>
+                <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{quiz.description}</p>
+                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1.5"><Clock size={14} /> {quiz.timeLimit} min</span>
+                  <span className="flex items-center gap-1.5"><FileText size={14} /> {quiz.questions.length} questions</span>
                 </div>
                 {attempted && myResult && (
-                  <div className={`result-badge ${pct >= 70 ? 'good' : pct >= 50 ? 'mid' : 'low'}`}>
-                    <Trophy size={14} /> Score: {myResult.score}/{quiz.questions.length} ({pct}%)
+                  <div
+                    className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium ${
+                      pct >= 70
+                        ? 'bg-success/10 text-success'
+                        : pct >= 50
+                          ? 'bg-warning/10 text-warning'
+                          : 'bg-destructive/10 text-destructive'
+                    }`}
+                  >
+                    Score: {myResult.score}/{quiz.questions.length} ({pct}%)
                   </div>
                 )}
-                <button
-                  className={`btn ${attempted ? 'btn-outline' : 'btn-primary'} start-btn`}
+                <Button
+                  variant={attempted ? 'outline' : 'default'}
+                  className="mt-auto w-full active:translate-y-px"
                   onClick={() => startQuiz(quiz)}
                 >
-                  <Play size={14} /> {attempted ? 'Retake Quiz' : 'Start Quiz'}
-                </button>
+                  <Play size={16} /> {attempted ? 'Retake quiz' : 'Start quiz'}
+                </Button>
               </div>
             );
-          })
-        )}
-      </div>
-
-      <style jsx>{`
-        .page-container { display: flex; flex-direction: column; gap: 1.5rem; }
-        .page-header h2 { font-size: 1.4rem; color: var(--text-main); margin-bottom: 0.2rem; }
-        .page-header p { color: var(--text-muted); font-size: 0.9rem; }
-
-        .quizzes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem; }
-        .quiz-card { padding: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
-        .quiz-top { display: flex; justify-content: space-between; align-items: center; }
-        .quiz-icon-wrap { color: var(--primary); }
-        .course-tag { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; }
-        .quiz-card h4 { font-size: 1rem; color: var(--text-main); }
-        .quiz-desc { font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; }
-        .quiz-info { display: flex; gap: 1rem; font-size: 0.78rem; color: var(--text-muted); }
-        .result-badge { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 700; padding: 0.4rem 0.75rem; border-radius: 8px; }
-        .result-badge.good { background: rgba(5,150,105,0.1); color: var(--success); }
-        .result-badge.mid { background: rgba(217,119,6,0.1); color: var(--warning); }
-        .result-badge.low { background: rgba(220,38,38,0.1); color: var(--danger); }
-        .start-btn { display: flex; align-items: center; justify-content: center; gap: 0.4rem; margin-top: auto; }
-
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(8px); padding: 1rem; }
-        .quiz-modal { width: 100%; max-width: 720px; max-height: 90vh; overflow-y: auto; padding: 0; display: flex; flex-direction: column; }
-        .quiz-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 2rem; border-bottom: 1px solid var(--card-border); position: sticky; top: 0; background: var(--card-bg); z-index: 2; }
-        .quiz-modal-title { display: flex; align-items: center; gap: 0.75rem; }
-        .quiz-modal-title h3 { font-size: 1.05rem; color: var(--text-main); }
-        .quiz-modal-title span { font-size: 0.78rem; color: var(--text-muted); display: block; }
-        .quiz-timer { display: flex; align-items: center; gap: 0.4rem; font-size: 1.2rem; font-weight: 700; color: var(--primary); padding: 0.4rem 0.85rem; border-radius: 8px; background: rgba(0,121,107,0.08); }
-        .quiz-timer.urgent { color: var(--danger); background: rgba(220,38,38,0.08); animation: pulse 1s infinite; }
-        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-
-        .quiz-questions { padding: 1.5rem 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
-        .question-card { background: rgba(0,0,0,0.02); border: 1px solid var(--card-border); border-radius: 10px; padding: 1.25rem; }
-        [data-theme='dark'] .question-card { background: rgba(255,255,255,0.02); }
-        .q-label { font-size: 0.72rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.5rem; }
-        .q-text { font-size: 1rem; color: var(--text-main); font-weight: 500; margin-bottom: 1rem; line-height: 1.5; }
-        .options-list { display: flex; flex-direction: column; gap: 0.5rem; }
-        .option-label { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; border-radius: 8px; border: 1px solid var(--card-border); cursor: pointer; transition: all 0.2s; font-size: 0.9rem; color: var(--text-main); }
-        .option-label:hover { border-color: var(--primary); background: rgba(0,121,107,0.04); }
-        .option-label.selected { border-color: var(--primary); background: rgba(0,121,107,0.08); font-weight: 500; }
-        .option-label input { display: none; }
-        .opt-letter { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--card-border); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
-        .option-label.selected .opt-letter { background: var(--primary); color: white; border-color: var(--primary); }
-        .quiz-submit-area { display: flex; justify-content: space-between; align-items: center; padding-top: 1rem; border-top: 1px solid var(--card-border); }
-        .answered-count { font-size: 0.85rem; color: var(--text-muted); }
-        .quiz-submit-area .btn { display: flex; align-items: center; gap: 0.4rem; }
-
-        .quiz-result-screen { padding: 2rem; display: flex; flex-direction: column; align-items: center; gap: 1.25rem; }
-        .result-circle { width: 140px; height: 140px; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 4px solid; gap: 0.2rem; }
-        .result-circle.pass { border-color: var(--success); color: var(--success); background: rgba(5,150,105,0.08); }
-        .result-circle.fail { border-color: var(--danger); color: var(--danger); background: rgba(220,38,38,0.08); }
-        .result-score { font-size: 1.4rem; font-weight: 700; }
-        .result-pct { font-size: 0.85rem; font-weight: 600; }
-        .quiz-result-screen h3 { font-size: 1.3rem; color: var(--text-main); }
-        .quiz-result-screen > p { color: var(--text-muted); font-size: 0.9rem; }
-        .result-breakdown { width: 100%; display: flex; flex-direction: column; gap: 0.6rem; max-height: 300px; overflow-y: auto; }
-        .result-row { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--card-border); font-size: 0.85rem; }
-        .result-row.correct { border-color: rgba(5,150,105,0.3); background: rgba(5,150,105,0.05); }
-        .result-row.wrong { border-color: rgba(220,38,38,0.3); background: rgba(220,38,38,0.05); }
-        .result-icon { flex-shrink: 0; margin-top: 0.1rem; }
-        .result-row.correct .result-icon { color: var(--success); }
-        .result-row.wrong .result-icon { color: var(--danger); }
-        .result-q { flex: 1; color: var(--text-main); line-height: 1.4; }
-        .result-ans { display: flex; flex-direction: column; gap: 0.2rem; text-align: right; }
-        .your-ans { color: var(--danger); font-size: 0.78rem; }
-        .correct-ans { color: var(--success); font-size: 0.78rem; font-weight: 600; }
-
-        .empty-full { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding: 4rem; color: var(--text-muted); text-align: center; grid-column: 1 / -1; }
-      `}</style>
+          })}
+        </div>
+      )}
     </div>
   );
 }
