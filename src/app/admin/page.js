@@ -40,7 +40,7 @@ export default function AdminDashboard() {
   const appointLecturerToCourse = useStore(state => state.appointLecturerToCourse);
   const academicStructure = useStore(state => state.getAcademicStructure());
   const currentSession = useStore(state => state.currentSession);
-  const advanceAcademicSession = useStore(state => state.advanceAcademicSession);
+  const setCurrentSession = useStore(state => state.setCurrentSession);
   const currentSemester = useStore(state => state.currentSemester);
   const setCurrentSemester = useStore(state => state.setCurrentSemester);
 
@@ -70,6 +70,7 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [sessionDraft, setSessionDraft] = useState('');
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [broadcastTarget, setBroadcastTarget] = useState('all');
 
@@ -199,7 +200,7 @@ export default function AdminDashboard() {
               <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
                 <div>
                   <CardTitle className="text-lg font-semibold">Academic session</CardTitle>
-                  <CardDescription className="text-sm">Provision a new session to roll the calendar forward and advance every student a level.</CardDescription>
+                  <CardDescription className="text-sm">Set the active session and semester that all students follow.</CardDescription>
                 </div>
                 <Badge variant="secondary" className="font-medium tabular-nums shrink-0">{currentSession} &middot; {currentSemester} sem</Badge>
               </CardHeader>
@@ -222,20 +223,30 @@ export default function AdminDashboard() {
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-sm leading-relaxed text-muted-foreground max-w-prose text-pretty">
-                    Provisioning a new session opens <span className="font-medium text-foreground">{nextSession(currentSession)}</span>, resets to the 1st semester, and promotes every student one level (100L &rarr; 200L &rarr; 300L &rarr; 400L &rarr; graduated).
-                  </p>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between rounded-md border border-border bg-muted/40 p-4">
+                  <div className="grid gap-1.5 flex-1">
+                    <Label className="text-xs font-medium text-muted-foreground">Academic session</Label>
+                    <p className="text-xs text-muted-foreground">Set the session everyone follows. Opening a new session reopens the 1st semester &mdash; student levels are not changed.</p>
+                    <Input
+                      value={sessionDraft}
+                      onChange={e => setSessionDraft(e.target.value)}
+                      placeholder={`e.g. ${nextSession(currentSession)}`}
+                      className="h-11 max-w-[12rem]"
+                    />
+                  </div>
                   <Button
-                    className="gap-2 shrink-0"
+                    className="gap-2 shrink-0 h-11"
                     onClick={() => {
-                      if (confirm(`Provision the ${nextSession(currentSession)} session?\n\nThis closes ${currentSession}, advances every student one level, and graduates final-year students. It cannot be undone.`)) {
-                        const res = advanceAcademicSession();
-                        alert(`Session ${res.newSession} provisioned. Students have been advanced to their new level.`);
+                      const target = (sessionDraft || nextSession(currentSession)).trim();
+                      if (!target || target === currentSession) { alert('Enter a different session value to open.'); return; }
+                      if (confirm(`Open the ${target} academic session for everyone?\n\nStudents will follow this session and the 1st semester opens for registration. Student levels are not changed.`)) {
+                        setCurrentSession(target);
+                        setSessionDraft('');
+                        alert(`The ${target} session is now open.`);
                       }
                     }}
                   >
-                    <ChevronRight className="h-4 w-4" /> Provision new session
+                    <ChevronRight className="h-4 w-4" /> Open session
                   </Button>
                 </div>
               </CardContent>

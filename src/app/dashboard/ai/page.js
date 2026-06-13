@@ -1,15 +1,124 @@
 "use client";
 
+import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Pause, SkipForward, Volume2, Maximize,
-  Paperclip, Smile, Send, Share, Bookmark,
-  Folder, Image as ImageIcon, Lock, UserPlus, Play
+  Send, Video, Users, MessageSquare, History,
+  FileText, FileVideo, FileImage, File as FileIcon, Play,
+  ArrowRight, FolderOpen
 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useStore } from '@/store/useStore';
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+// ─── helpers ───
+function initials(name) {
+  if (!name) return '?';
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDate(timestamp) {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function materialIcon(type) {
+  switch ((type || '').toLowerCase()) {
+    case 'video':
+      return FileVideo;
+    case 'image':
+      return FileImage;
+    case 'pdf':
+    case 'doc':
+    case 'document':
+      return FileText;
+    default:
+      return FileIcon;
+  }
+}
 
 export default function LiveClassDashboard() {
+  const router = useRouter();
+  const {
+    user,
+    liveSessions,
+    sessionMessages,
+    materials,
+    callHistory,
+    courses,
+    getStudentCourseIds,
+    sendSessionMessage,
+  } = useStore();
+
+  const [draft, setDraft] = useState('');
+
+  // ─── active session: first session in one of the student's courses, else first session, else null ───
+  const activeSession = useMemo(() => {
+    const myCourseIds = getStudentCourseIds(user);
+    return (
+      liveSessions.find((s) => myCourseIds.includes(s.courseId)) ||
+      liveSessions[0] ||
+      null
+    );
+  }, [liveSessions, user, getStudentCourseIds]);
+
+  const course = activeSession
+    ? courses.find((c) => c.id === activeSession.courseId)
+    : null;
+
+  const participants = activeSession?.participants || [];
+
+  // ─── chat: messages for the active session, ordered by timestamp ───
+  const messages = useMemo(() => {
+    if (!activeSession) return [];
+    return sessionMessages
+      .filter((m) => m.sessionId === activeSession.id)
+      .slice()
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }, [sessionMessages, activeSession]);
+
+  // ─── class materials for the active session's course ───
+  const classMaterials = useMemo(() => {
+    if (!activeSession) return [];
+    return materials.filter((m) => m.courseId === activeSession.courseId);
+  }, [materials, activeSession]);
+
+  // ─── previous records, most-recent-first ───
+  const previousRecords = useMemo(() => {
+    return callHistory
+      .slice()
+      .sort((a, b) => new Date(b.endTime) - new Date(a.endTime));
+  }, [callHistory]);
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text || !activeSession) return;
+    sendSessionMessage(activeSession.id, text);
+    setDraft('');
+  };
+
+  const courseLabel = course
+    ? `${course.code} · ${course.title}`
+    : activeSession?.title || 'Live session';
+
   return (
     <div className="animate-fade-in flex h-full flex-col gap-6">
       <header>
@@ -19,296 +128,305 @@ export default function LiveClassDashboard() {
       </header>
 
       <div className="grid min-h-[400px] grid-cols-1 gap-6 lg:grid-cols-[2.2fr_1fr]">
-        {/* Video player */}
+        {/* Session area */}
         <section className="flex flex-col gap-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-pulse rounded-full bg-success" />
-                </span>
-                Live
-              </span>
-              <h2 className="text-lg font-semibold text-foreground">Design patterns</h2>
-              <span aria-hidden className="text-border">|</span>
-              <span className="text-sm text-muted-foreground">by</span>
-              <div className="flex items-center gap-2">
-                <Avatar className="h-6 w-6">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=rachel" alt="Rachel Zang" />
-                  <AvatarFallback>RZ</AvatarFallback>
-                </Avatar>
-                <span className="text-sm font-medium text-foreground">Rachel Zang</span>
-              </div>
-            </div>
-            <div className="flex items-center">
-              <Avatar className="-ml-2 h-8 w-8 border-2 border-card first:ml-0">
-                <AvatarImage src="https://i.pravatar.cc/150?u=1" alt="Participant" />
-                <AvatarFallback>P1</AvatarFallback>
-              </Avatar>
-              <Avatar className="-ml-2 h-8 w-8 border-2 border-card">
-                <AvatarImage src="https://i.pravatar.cc/150?u=2" alt="Participant" />
-                <AvatarFallback>P2</AvatarFallback>
-              </Avatar>
-              <Avatar className="-ml-2 h-8 w-8 border-2 border-card">
-                <AvatarImage src="https://i.pravatar.cc/150?u=3" alt="Participant" />
-                <AvatarFallback>P3</AvatarFallback>
-              </Avatar>
-              <Avatar className="-ml-2 h-8 w-8 border-2 border-card">
-                <AvatarImage src="https://i.pravatar.cc/150?u=4" alt="Participant" />
-                <AvatarFallback>P4</AvatarFallback>
-              </Avatar>
-              <span className="-ml-2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-secondary text-xs font-medium tabular-nums text-secondary-foreground">
-                +9
-              </span>
-            </div>
-          </div>
+          {activeSession ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                    Live
+                  </span>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {course ? course.code : activeSession.title}
+                  </h2>
+                  {course && (
+                    <>
+                      <span aria-hidden className="text-border">|</span>
+                      <span className="text-sm text-muted-foreground">{course.title}</span>
+                    </>
+                  )}
+                  <span aria-hidden className="text-border">|</span>
+                  <span className="text-sm text-muted-foreground">by</span>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-[10px]">
+                        {initials(activeSession.lecturerName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium text-foreground">
+                      {activeSession.lecturerName}
+                    </span>
+                  </div>
+                </div>
 
-          <div className="relative h-[380px] w-full overflow-hidden rounded-xl border border-border bg-navy">
-            <img
-              src="https://images.unsplash.com/photo-1573164713988-8665fc963095?q=80&w=2069&auto=format&fit=crop"
-              alt="Instructor presenting the live class"
-              className="h-full w-full object-cover"
-            />
-            <div className="absolute inset-x-6 bottom-6 flex items-center justify-between rounded-md border border-border bg-card/95 px-4 py-2.5 shadow-sm">
-              <div className="flex items-center gap-1">
-                <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Pause">
-                  <Pause size={18} />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Skip forward">
-                  <SkipForward size={18} />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Volume">
-                  <Volume2 size={18} />
-                </Button>
+                {participants.length > 0 && (
+                  <div className="flex items-center">
+                    {participants.slice(0, 4).map((p) => (
+                      <Avatar
+                        key={p.id}
+                        className="-ml-2 h-8 w-8 border-2 border-card first:ml-0"
+                      >
+                        <AvatarFallback className="text-xs">
+                          {initials(p.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    ))}
+                    {participants.length > 4 && (
+                      <span className="-ml-2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-secondary text-xs font-medium tabular-nums text-secondary-foreground">
+                        +{participants.length - 4}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-              <Button variant="ghost" size="icon" className="h-9 w-9" aria-label="Fullscreen">
-                <Maximize size={18} />
+
+              {/* Branded session panel (no external images) */}
+              <div className="relative flex h-[380px] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-border bg-navy text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-card/10 text-primary-foreground">
+                  <Video size={26} strokeWidth={1.5} />
+                </span>
+                <p className="mt-4 font-serif text-3xl font-semibold tracking-tight text-primary-foreground">
+                  {course ? course.code : activeSession.title}
+                </p>
+                <p className="mt-1 max-w-prose px-6 text-sm text-primary-foreground/70">
+                  {courseLabel}
+                </p>
+                <div className="absolute inset-x-6 bottom-6 flex items-center justify-between rounded-md border border-border bg-card/95 px-4 py-2.5 shadow-sm">
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Users size={16} />
+                    {participants.length} in session
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => router.push(`/dashboard/classroom/${activeSession.id}`)}
+                  >
+                    Join live class
+                    <ArrowRight size={16} className="ml-1.5" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full min-h-[380px] flex-col items-center justify-center gap-4 rounded-xl border border-border bg-card p-8 text-center shadow-sm">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Video size={24} strokeWidth={1.5} />
+              </span>
+              <p className="max-w-prose text-sm text-muted-foreground">
+                No live class is in session right now.
+              </p>
+              <Button variant="outline" onClick={() => router.push('/dashboard/classroom')}>
+                Go to live classes
               </Button>
             </div>
-          </div>
+          )}
         </section>
 
         {/* Group chat */}
         <section className="flex h-full flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
           <h3 className="mb-4 text-lg font-semibold text-foreground">Group chat</h3>
 
-          <ScrollArea className="-mr-2 flex-1 pr-2">
-            <div className="flex flex-col gap-5">
-              <div className="flex items-start gap-3">
-                <Avatar className="mt-1 h-8 w-8 shrink-0">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=5" alt="Classmate" />
-                  <AvatarFallback>C</AvatarFallback>
-                </Avatar>
-                <div className="flex max-w-[80%] flex-col gap-1">
-                  <span className="px-1 text-xs tabular-nums text-muted-foreground">14:33</span>
-                  <div className="rounded-md rounded-tl-sm bg-muted px-3 py-2 text-sm leading-relaxed text-foreground">
-                    Could you show some examples of what you consider to be the best practice of existing mobile onboardings?
-                  </div>
-                </div>
+          <ScrollArea className="-mr-2 min-h-[200px] flex-1 pr-2">
+            {messages.length > 0 ? (
+              <div className="flex flex-col gap-5">
+                {messages.map((m) => {
+                  const mine = m.fromId === user?.id;
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex items-start gap-3 ${mine ? 'justify-end' : ''}`}
+                    >
+                      {!mine && (
+                        <Avatar className="mt-1 h-8 w-8 shrink-0">
+                          <AvatarFallback className="text-xs">
+                            {initials(m.fromName)}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                      <div
+                        className={`flex max-w-[80%] flex-col gap-1 ${mine ? 'items-end' : ''}`}
+                      >
+                        <span className="px-1 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{m.fromName}</span>
+                          <span className="tabular-nums"> · {formatTime(m.timestamp)}</span>
+                        </span>
+                        <div
+                          className={
+                            mine
+                              ? 'rounded-md rounded-tr-sm bg-primary px-3 py-2 text-sm leading-relaxed text-primary-foreground'
+                              : 'rounded-md rounded-tl-sm bg-muted px-3 py-2 text-sm leading-relaxed text-foreground'
+                          }
+                        >
+                          {m.content}
+                        </div>
+                      </div>
+                      {mine && (
+                        <Avatar className="mt-1 h-8 w-8 shrink-0">
+                          <AvatarFallback className="text-xs">
+                            {initials(m.fromName)}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-
-              <div className="flex items-start gap-3">
-                <Avatar className="mt-1 h-8 w-8 shrink-0">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=rachel" alt="Rachel Zang" />
-                  <AvatarFallback>RZ</AvatarFallback>
-                </Avatar>
-                <div className="flex max-w-[80%] flex-col gap-1">
-                  <span className="px-1 text-xs tabular-nums text-muted-foreground">14:34</span>
-                  <div className="rounded-md rounded-tl-sm bg-muted px-3 py-2 text-sm leading-relaxed text-foreground">
-                    Sure thing. I&apos;ve saved some for you.
-                  </div>
-                </div>
+            ) : (
+              <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 text-center">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <MessageSquare size={20} strokeWidth={1.5} />
+                </span>
+                <p className="max-w-prose text-sm text-muted-foreground">
+                  {activeSession
+                    ? 'No messages yet. Start the conversation.'
+                    : 'Chat opens when a live class is in session.'}
+                </p>
               </div>
-
-              <div className="flex items-start justify-end gap-3">
-                <div className="flex max-w-[80%] flex-col items-end gap-1">
-                  <span className="px-1 text-xs tabular-nums text-muted-foreground">14:35</span>
-                  <div className="rounded-md rounded-tr-sm bg-primary px-3 py-2 text-sm leading-relaxed text-primary-foreground">
-                    That&apos;s awesome, thanks.
-                  </div>
-                </div>
-                <Avatar className="mt-1 h-8 w-8 shrink-0">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=me" alt="You" />
-                  <AvatarFallback>You</AvatarFallback>
-                </Avatar>
-              </div>
-            </div>
+            )}
           </ScrollArea>
 
-          <div className="mt-4">
-            <p className="mb-2 px-1 text-xs text-muted-foreground">Mike is typing…</p>
+          <form onSubmit={handleSend} className="mt-4">
             <div className="flex items-center gap-1 rounded-md border border-input bg-background p-1.5 transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
-              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Attach file">
-                <Paperclip size={18} />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Add emoji">
-                <Smile size={18} />
-              </Button>
-              <input
+              <Input
                 type="text"
-                placeholder="Type a message…"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                disabled={!activeSession}
+                placeholder={
+                  activeSession ? 'Type a message…' : 'No active session'
+                }
                 aria-label="Message"
-                className="flex-1 border-none bg-transparent px-2 text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                className="h-8 flex-1 border-none bg-transparent px-2 shadow-none focus-visible:ring-0"
               />
-              <Button size="icon" className="h-8 w-8" aria-label="Send message">
+              <Button
+                type="submit"
+                size="icon"
+                className="h-8 w-8"
+                disabled={!activeSession || !draft.trim()}
+                aria-label="Send message"
+              >
                 <Send size={18} />
               </Button>
             </div>
-          </div>
+          </form>
         </section>
       </div>
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {/* Content */}
+        {/* Class materials */}
         <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Content</h3>
-          <ol className="relative flex flex-col gap-5 before:absolute before:bottom-3 before:left-[15px] before:top-7 before:w-px before:bg-border">
-            <li className="relative z-[1] flex items-center gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
-                <Folder size={16} />
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Class materials</h3>
+          {classMaterials.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {classMaterials.map((material) => {
+                const Icon = materialIcon(material.type);
+                return (
+                  <li
+                    key={material.id}
+                    className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <Icon size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {material.title}
+                      </p>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {material.type}
+                      </p>
+                    </div>
+                    {material.size && (
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {material.size}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <FolderOpen size={20} strokeWidth={1.5} />
               </span>
-              <span className="flex-1 text-sm font-medium text-foreground">Introduction</span>
-              <span className="text-xs tabular-nums text-muted-foreground">2 min</span>
-            </li>
-            <li className="relative z-[1] flex items-center gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-primary/40 bg-brand-green-soft text-primary">
-                <ImageIcon size={16} />
-              </span>
-              <span className="flex-1 text-sm font-medium text-foreground">Landing page</span>
-              <span className="text-xs tabular-nums text-muted-foreground">15 min</span>
-            </li>
-            <li className="relative z-[1] flex items-center gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
-                <Lock size={16} />
-              </span>
-              <span className="flex-1 text-sm font-medium text-foreground">Login and signup</span>
-              <span className="text-xs tabular-nums text-muted-foreground">20 min</span>
-            </li>
-            <li className="relative z-[1] flex items-center gap-3">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground">
-                <UserPlus size={16} />
-              </span>
-              <span className="flex-1 text-sm font-medium text-muted-foreground">User onboarding</span>
-              <span className="text-xs tabular-nums text-muted-foreground">18 min</span>
-            </li>
-          </ol>
+              <p className="text-sm text-muted-foreground">No materials for this class yet.</p>
+            </div>
+          )}
         </section>
 
-        {/* Resources */}
+        {/* Participants */}
         <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
-          <h3 className="mb-4 text-lg font-semibold text-foreground">Resources</h3>
-          <ul className="flex flex-col gap-2">
-            <li className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium tabular-nums text-muted-foreground">01</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">LP design inspirations</p>
-                <p className="text-xs text-muted-foreground">100+ real cases</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Share resource">
-                <Share size={14} />
-              </Button>
-            </li>
-            <li className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium tabular-nums text-muted-foreground">02</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Mobile design patterns</p>
-                <p className="text-xs text-muted-foreground">Best practices used worldwide</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Share resource">
-                <Share size={14} />
-              </Button>
-            </li>
-            <li className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium tabular-nums text-muted-foreground">03</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Micro-interactions</p>
-                <p className="text-xs text-muted-foreground">200 inspirational designs</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Share resource">
-                <Share size={14} />
-              </Button>
-            </li>
-            <li className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-sm font-medium tabular-nums text-muted-foreground">04</span>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">How to increase website conversion</p>
-                <p className="text-xs text-muted-foreground">Practical advice</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Share resource">
-                <Share size={14} />
-              </Button>
-            </li>
-          </ul>
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Participants</h3>
+          {participants.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {participants.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent"
+                >
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className="text-xs">{initials(p.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
+                    {p.role && (
+                      <p className="text-xs text-muted-foreground">{p.role}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Users size={20} strokeWidth={1.5} />
+              </span>
+              <p className="text-sm text-muted-foreground">
+                {activeSession
+                  ? 'No one has joined this session yet.'
+                  : 'Participants appear when a class is live.'}
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Previous class records */}
         <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <h3 className="mb-4 text-lg font-semibold text-foreground">Previous class records</h3>
-          <ul className="flex flex-col gap-3">
-            <li className="flex items-center gap-3">
-              <div className="relative h-[60px] w-[90px] shrink-0 overflow-hidden rounded-md border border-border">
-                <img
-                  src="https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop"
-                  alt="Design accessibility recording"
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute inset-0 flex items-center justify-center bg-navy/40">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-card/90 text-foreground">
-                    <Play size={12} fill="currentColor" />
-                  </span>
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Design accessibility</p>
-                <p className="mt-1 text-xs tabular-nums text-muted-foreground">05.01.2023</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Bookmark recording">
-                <Bookmark size={16} />
-              </Button>
-            </li>
-            <li className="flex items-center gap-3">
-              <div className="relative h-[60px] w-[90px] shrink-0 overflow-hidden rounded-md border border-border">
-                <img
-                  src="https://images.unsplash.com/photo-1573164574572-cb89e39749b4?q=80&w=2069&auto=format&fit=crop"
-                  alt="UX research recording"
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute inset-0 flex items-center justify-center bg-navy/40">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-card/90 text-foreground">
-                    <Play size={12} fill="currentColor" />
-                  </span>
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">UX research</p>
-                <p className="mt-1 text-xs tabular-nums text-muted-foreground">04.01.2023</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Bookmark recording">
-                <Bookmark size={16} />
-              </Button>
-            </li>
-            <li className="flex items-center gap-3">
-              <div className="relative h-[60px] w-[90px] shrink-0 overflow-hidden rounded-md border border-border">
-                <img
-                  src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=2070&auto=format&fit=crop"
-                  alt="Wireframing recording"
-                  className="h-full w-full object-cover"
-                />
-                <span className="absolute inset-0 flex items-center justify-center bg-navy/40">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-card/90 text-foreground">
-                    <Play size={12} fill="currentColor" />
-                  </span>
-                </span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Wireframing</p>
-                <p className="mt-1 text-xs tabular-nums text-muted-foreground">04.01.2023</p>
-              </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Bookmark recording">
-                <Bookmark size={16} />
-              </Button>
-            </li>
-          </ul>
+          {previousRecords.length > 0 ? (
+            <ul className="flex flex-col gap-3">
+              {previousRecords.map((record, i) => (
+                <li key={`${record.id || record.title}-${i}`} className="flex items-center gap-3">
+                  <div className="relative flex h-[60px] w-[90px] shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-navy">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-card/90 text-foreground">
+                      <Play size={12} fill="currentColor" />
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{record.title}</p>
+                    <p className="mt-1 flex items-center gap-2 text-xs tabular-nums text-muted-foreground">
+                      <span>{formatDate(record.endTime)}</span>
+                      {record.duration && (
+                        <>
+                          <span aria-hidden className="text-border">·</span>
+                          <span>{record.duration}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <History size={20} strokeWidth={1.5} />
+              </span>
+              <p className="text-sm text-muted-foreground">No past recordings yet.</p>
+            </div>
+          )}
         </section>
       </div>
     </div>

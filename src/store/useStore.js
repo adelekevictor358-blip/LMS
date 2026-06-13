@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { nextSession, nextLevel, semesterFromCode } from '@/lib/utils';
+import { semesterFromCode } from '@/lib/utils';
 
 const ACADEMIC_STRUCTURE = {
   colleges: [
@@ -721,37 +721,26 @@ export const useStore = create(
         setAdminViewAs: (role) => set({ adminViewAs: role }),
 
         // ─── ACADEMIC SESSION ───
-        // Provision the next academic session: roll the session forward and advance
-        // every student one level (final-year students graduate). Promoted students
-        // start with a clean registration so they re-register for their new level.
-        advanceAcademicSession: () => {
-          const promote = (u) => {
-            if (!u || u.role !== 'student' || u.level === 'Graduated') return u;
-            const newLevel = nextLevel(u.level);
-            return {
-              ...u,
-              level: newLevel,
-              enrolledCourseIds: [],
-              graduated: newLevel === 'Graduated' ? true : (u.graduated || false),
-            };
-          };
-          const current = get().currentSession;
-          const session = nextSession(current);
+        // Provision the active academic session. This only updates the synced
+        // session field that everyone follows and reopens the 1st semester for
+        // registration. It does NOT change any student's level — promotion is not
+        // automatic; student levels are managed separately by the admin.
+        setCurrentSession: (session) => {
+          const s = String(session || '').trim();
+          if (!s) return { success: false, error: 'A session value is required.' };
           set((state) => {
-            const promotedCount = state.dynamicUsers.filter(u => u.role === 'student' && u.level !== 'Graduated').length;
+            if (s === state.currentSession) return {};
             return {
-              currentSession: session,
-              currentSemester: '1st', // new session always opens in the first semester
-              sessionHistory: [...(state.sessionHistory || []), { session: current, closedAt: new Date().toISOString(), promoted: promotedCount }],
-              dynamicUsers: state.dynamicUsers.map(promote),
-              user: state.user?.role === 'student' ? promote(state.user) : state.user,
+              currentSession: s,
+              currentSemester: '1st', // a new session opens in the first semester
+              sessionHistory: [...(state.sessionHistory || []), { session: state.currentSession, closedAt: new Date().toISOString() }],
               notifications: [
-                { id: Date.now(), text: `A new academic session (${session}) has begun. You have been moved to your new level — please register your courses.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+                { id: Date.now(), text: `The ${s} academic session is now open (1st semester). Please register your courses.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
                 ...state.notifications,
               ],
             };
           });
-          return { newSession: session };
+          return { success: true, session: s };
         },
 
         // Provision the open registration semester. Students can only register for
