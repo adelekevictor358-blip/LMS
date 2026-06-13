@@ -1061,6 +1061,21 @@ export const useStore = create(
             return { dynamicUsers, user: activeUser };
           });
         },
+
+        // Deliberately set a single student's level (admin Directory editor).
+        // Promotion is never automatic; this is the only way a level changes.
+        // Changing a level resets that student's registration for the new level.
+        setStudentLevel: (userId, level) => {
+          const valid = ['100L', '200L', '300L', '400L', 'Graduated'];
+          if (!valid.includes(level)) return;
+          const apply = (u) => (u && u.id === userId && u.role === 'student')
+            ? { ...u, level, enrolledCourseIds: [], graduated: level === 'Graduated' }
+            : u;
+          set((state) => ({
+            dynamicUsers: state.dynamicUsers.map(apply),
+            user: apply(state.user),
+          }));
+        },
       };
     },
     {

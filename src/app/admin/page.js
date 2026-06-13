@@ -38,6 +38,7 @@ export default function AdminDashboard() {
   const deleteCourse = useStore(state => state.deleteCourse);
   const adminToggleEnrollment = useStore(state => state.adminToggleEnrollment);
   const appointLecturerToCourse = useStore(state => state.appointLecturerToCourse);
+  const setStudentLevel = useStore(state => state.setStudentLevel);
   const academicStructure = useStore(state => state.getAcademicStructure());
   const currentSession = useStore(state => state.currentSession);
   const setCurrentSession = useStore(state => state.setCurrentSession);
@@ -400,6 +401,7 @@ export default function AdminDashboard() {
                          <TableHead className="text-xs font-medium text-muted-foreground py-4">User</TableHead>
                          <TableHead className="text-xs font-medium text-muted-foreground">ID reference</TableHead>
                          <TableHead className="text-xs font-medium text-muted-foreground">Role</TableHead>
+                         <TableHead className="text-xs font-medium text-muted-foreground">Level</TableHead>
                          <TableHead className="text-xs font-medium text-muted-foreground">Password</TableHead>
                          <TableHead className="text-xs font-medium text-muted-foreground">Last seen</TableHead>
                          <TableHead className="text-xs font-medium text-muted-foreground text-right px-6">Actions</TableHead>
@@ -430,6 +432,29 @@ export default function AdminDashboard() {
                                <Badge variant="outline" className={`capitalize border-transparent ${u.role === 'admin' ? 'bg-destructive/10 text-destructive' : u.role === 'lecturer' ? 'bg-info/10 text-info' : 'bg-success/10 text-success'}`}>
                                   {u.role}
                                </Badge>
+                            </TableCell>
+                            <TableCell>
+                               {u.role === 'student' ? (
+                                  <Select
+                                     value={u.level || '100L'}
+                                     onValueChange={(v) => {
+                                        if (v !== (u.level || '100L') && confirm(`Change ${u.name}'s level to ${v}? This resets their course registration for the new level.`)) {
+                                           setStudentLevel(u.id, v);
+                                        }
+                                     }}
+                                  >
+                                     <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                                     <SelectContent className="h-9 w-[8.5rem]">
+                                        <SelectItem value="100L">100 Level</SelectItem>
+                                        <SelectItem value="200L">200 Level</SelectItem>
+                                        <SelectItem value="300L">300 Level</SelectItem>
+                                        <SelectItem value="400L">400 Level</SelectItem>
+                                        <SelectItem value="Graduated">Graduated</SelectItem>
+                                     </SelectContent>
+                                  </Select>
+                               ) : (
+                                  <span className="text-xs text-muted-foreground">&mdash;</span>
+                               )}
                             </TableCell>
                             <TableCell>
                                <code className="text-xs font-mono px-2 py-1 bg-muted rounded-md text-muted-foreground cursor-pointer transition-colors hover:text-foreground" title="Click to copy" onClick={() => navigator.clipboard.writeText(u.password || 'password123')}>
