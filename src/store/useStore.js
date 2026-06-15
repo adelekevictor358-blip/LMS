@@ -41,6 +41,11 @@ const MOCK_DB = {
   ]
 };
 
+// Monotonic counter so ids minted within the same millisecond never collide
+// (Date.now() alone can repeat across rapid successive calls).
+let _idCounter = 0;
+const nextId = () => `${Date.now()}-${(_idCounter = (_idCounter + 1) % 1000000)}`;
+
 let bc;
 if (typeof window !== 'undefined') {
   bc = new BroadcastChannel('lms_notifications');
@@ -61,6 +66,7 @@ export const useStore = create(
         user: null,
         dynamicUsers: [],
         excludedIds: [],
+        notes: [], // personal notepad entries (per-user, see NOTEPAD ACTIONS)
         liveSessions: [],
         scheduledSessions: [], // Future engagements
         currentSession: '2025/2026',
@@ -425,6 +431,180 @@ export const useStore = create(
             notifications: [newNotif, ...state.notifications],
             activeToast: newNotif
           }));
+        },
+
+        // ─── RICH NOTIFICATION INFRASTRUCTURE ───
+        // The single helper every future feature should call to notify users.
+        // Prepends a per-recipient notification onto the shared `notifications`
+        // array. Backward compatible: existing notifications (no recipientId /
+        // no target) remain visible to everyone via getMyNotifications().
+        // Returns the created notification.
+        pushNotification: ({ recipientId, target, type, text, link, isUrgent } = {}) => {
+          const newNotif = {
+            id: nextId(),
+            recipientId: recipientId ?? null,
+            target: target ?? null, // 'all' | 'student' | 'lecturer' | 'admin'
+            type: type ?? 'system',
+            text: text ?? '',
+            link: link ?? null,
+            time: new Date().toISOString(),
+            read: false,
+            isUrgent: !!isUrgent,
+          };
+          set((state) => ({
+            notifications: [newNotif, ...state.notifications],
+            activeToast: newNotif,
+          }));
+          return newNotif;
+        },
+
+        // Internal predicate: is a notification relevant to the given user?
+        // Honors both the new `recipientId` and the legacy `targetUserId` field
+        // used by existing producers (private call invites, etc.).
+        _isNotifForUser: (n, user) => {
+          if (!user) return false;
+          const recip = n.recipientId ?? n.targetUserId ?? null;
+          if (recip && recip !== user.id) return false;
+          const tgt = n.target ?? null;
+          if (tgt && tgt !== 'all' && tgt !== user.role) return false;
+          const muted = user.mutedNotificationTypes || [];
+          if (n.type && muted.includes(n.type)) return false;
+          return true;
+        },
+
+        // Notifications relevant to the CURRENT user, newest first. Legacy
+        // notifications with no recipientId/target stay visible to everyone.
+        getMyNotifications: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return [];
+          const relevant = state.notifications.filter((n) => state._isNotifForUser(n, user));
+          // Newest first. New notifs carry ISO `time`; legacy ones may carry a
+          // human string ("1 hr ago") or a numeric id — fall back to id order.
+          return [...relevant].sort((a, b) => {
+            const ta = Date.parse(a.time);
+            const tb = Date.parse(b.time);
+            if (!Number.isNaN(ta) && !Number.isNaN(tb)) return tb - ta;
+            return 0; // preserve existing (already newest-first) order otherwise
+          });
+        },
+
+        // Mark ALL of the current user's relevant notifications read.
+        markAllNotificationsRead: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return;
+          set((s) => ({
+            notifications: s.notifications.map((n) =>
+              s._isNotifForUser(n, user) ? { ...n, read: true } : n
+            ),
+          }));
+        },
+
+        // Remove a single notification by id (only if relevant to current user).
+        clearNotification: (id) => {
+          const state = get();
+          const user = state.user;
+          set((s) => ({
+            notifications: s.notifications.filter((n) => {
+              if (n.id !== id) return true;
+              // only the owner (or, for unscoped legacy notifs, anyone) may clear
+              return user ? !s._isNotifForUser(n, user) : false;
+            }),
+          }));
+        },
+
+        // Remove ALL of the current user's relevant notifications.
+        clearAllNotifications: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return;
+          set((s) => ({
+            notifications: s.notifications.filter((n) => !s._isNotifForUser(n, user)),
+          }));
+        },
+
+        // ─── PER-USER NOTIFICATION MUTE PREFERENCES ───
+        // Toggle a notification `type` in the current user's muted list. Stored
+        // on the user record (dynamicUsers + active user) so it persists and
+        // getMyNotifications can exclude muted types.
+        toggleNotificationType: (type) => {
+          const state = get();
+          const user = state.user;
+          if (!user || !type) return;
+          const apply = (u) => {
+            if (!u || u.id !== user.id) return u;
+            const muted = u.mutedNotificationTypes || [];
+            const next = muted.includes(type)
+              ? muted.filter((t) => t !== type)
+              : [...muted, type];
+            return { ...u, mutedNotificationTypes: next };
+          };
+          set((s) => ({
+            dynamicUsers: s.dynamicUsers.map(apply),
+            user: apply(s.user),
+          }));
+        },
+
+        // ─── NOTEPAD ACTIONS (scoped to current logged-in user) ───
+        // Each note: { id, ownerId, title, body, courseTag?, pinned, createdAt, updatedAt }
+        addNote: (partial = {}) => {
+          const user = get().user;
+          if (!user) return null;
+          const now = new Date().toISOString();
+          const newNote = {
+            id: nextId(),
+            ownerId: user.id,
+            title: partial.title ?? '',
+            body: partial.body ?? '',
+            courseTag: partial.courseTag ?? null,
+            pinned: partial.pinned ?? false,
+            createdAt: now,
+            updatedAt: now,
+          };
+          set((state) => ({ notes: [newNote, ...state.notes] }));
+          return newNote;
+        },
+        updateNote: (id, patch = {}) => {
+          const user = get().user;
+          if (!user) return;
+          set((state) => ({
+            notes: state.notes.map((n) =>
+              n.id === id && n.ownerId === user.id
+                ? { ...n, ...patch, id: n.id, ownerId: n.ownerId, createdAt: n.createdAt, updatedAt: new Date().toISOString() }
+                : n
+            ),
+          }));
+        },
+        deleteNote: (id) => {
+          const user = get().user;
+          if (!user) return;
+          set((state) => ({
+            notes: state.notes.filter((n) => !(n.id === id && n.ownerId === user.id)),
+          }));
+        },
+        togglePinNote: (id) => {
+          const user = get().user;
+          if (!user) return;
+          set((state) => ({
+            notes: state.notes.map((n) =>
+              n.id === id && n.ownerId === user.id
+                ? { ...n, pinned: !n.pinned, updatedAt: new Date().toISOString() }
+                : n
+            ),
+          }));
+        },
+        // Current user's notes: pinned first, then most-recently-updated.
+        getMyNotes: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return [];
+          return state.notes
+            .filter((n) => n.ownerId === user.id)
+            .sort((a, b) => {
+              if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+              return new Date(b.updatedAt) - new Date(a.updatedAt);
+            });
         },
 
         // ─── COURSE ACTIONS ───
@@ -1265,6 +1445,7 @@ export const useStore = create(
         user: state.user,
         dynamicUsers: state.dynamicUsers,
         excludedIds: state.excludedIds,
+        notes: state.notes,
         courses: state.courses,
         currentSession: state.currentSession,
         currentSemester: state.currentSemester,

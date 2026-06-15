@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
 import ChatBot from '@/components/ChatBot';
 import ToastNotifier from '@/components/ToastNotifier';
+import NotePad from '@/components/NotePad';
 import { Button } from '@/components/ui/button';
 import { Loader2, UserCog, LogOut } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -95,6 +96,7 @@ export default function DashboardLayout({ children }) {
       </div>
 
       <ChatBot />
+      <NotePad />
       <ToastNotifier />
     </div>
   );

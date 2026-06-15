@@ -2,19 +2,20 @@
 
 import { useStore } from '@/store/useStore';
 import { useTheme } from 'next-themes';
-import { Search, Bell, Sun, Moon, LogOut, User, ChevronDown } from 'lucide-react';
+import { Search, Sun, Moon, LogOut, User, ChevronDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import NotificationBell from '@/components/NotificationBell';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 
 export default function Header() {
-  const { user, notifications, logout } = useStore();
+  const { user, logout } = useStore();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
@@ -22,8 +23,6 @@ export default function Header() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   return (
     <header className="flex items-center justify-end gap-2 pb-6">
@@ -54,22 +53,7 @@ export default function Header() {
           </Button>
         )}
 
-        <div className="relative">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
-            className="text-muted-foreground hover:text-foreground"
-            onClick={() => router.push('/dashboard/inbox')}
-          >
-            <Bell size={18} />
-          </Button>
-          {unreadCount > 0 && (
-            <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full border-2 border-background bg-destructive px-1 text-[0.625rem] font-medium tabular-nums leading-none text-destructive-foreground">
-              {unreadCount}
-            </span>
-          )}
-        </div>
+        <NotificationBell />
 
         <div className="ml-2 border-l border-border pl-3">
           <DropdownMenu>

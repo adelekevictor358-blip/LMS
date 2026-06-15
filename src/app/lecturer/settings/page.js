@@ -2,7 +2,7 @@
 
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
-import { Lock, ShieldCheck, CheckCircle2, AlertCircle, Mail, Briefcase, Fingerprint } from 'lucide-react';
+import { Lock, ShieldCheck, CheckCircle2, AlertCircle, Mail, Briefcase, Fingerprint, Bell, HelpCircle, Library, ClipboardList, GraduationCap, BookOpen, ShieldAlert, Archive, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,21 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
+const NOTIFICATION_TYPES = [
+  { type: 'quiz', label: 'Quizzes', description: 'New quizzes and assessment reminders.', icon: HelpCircle },
+  { type: 'material', label: 'Course materials', description: 'Uploaded lecture notes and resources.', icon: Library },
+  { type: 'assignment', label: 'Assignments', description: 'New assignments and submission deadlines.', icon: ClipboardList },
+  { type: 'result', label: 'Results', description: 'Released grades and result updates.', icon: GraduationCap },
+  { type: 'registration', label: 'Registration', description: 'Course registration windows and reminders.', icon: BookOpen },
+  { type: 'security', label: 'Security', description: 'Sign-in and account security alerts.', icon: ShieldAlert },
+  { type: 'pastq', label: 'Past questions', description: 'Newly added past question papers.', icon: Archive },
+  { type: 'message', label: 'Messages', description: 'Direct messages and chat activity.', icon: MessageSquare },
+  { type: 'system', label: 'System', description: 'Institutional broadcasts and announcements.', icon: Bell },
+];
+
 export default function LecturerSettings() {
-  const { user, changePassword } = useStore();
+  const { user, changePassword, toggleNotificationType } = useStore();
+  const mutedTypes = user?.mutedNotificationTypes ?? [];
   const [passwords, setPasswords] = useState({ current: '', new: '', confirm: '' });
   const [status, setStatus] = useState('');
 
@@ -208,6 +221,52 @@ export default function LecturerSettings() {
                 <Button variant="outline" className="active:translate-y-px">
                   Configure 2FA
                 </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-card border border-border rounded-xl shadow-sm">
+            <CardHeader className="border-b border-border">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted shrink-0">
+                  <Bell size={18} className="text-muted-foreground" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg font-semibold text-foreground">Notification preferences</CardTitle>
+                  <CardDescription className="text-sm text-muted-foreground">
+                    Choose which alerts you receive. Turning one off mutes that type everywhere.
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="divide-y divide-border">
+                {NOTIFICATION_TYPES.map(({ type, label, description, icon: Icon }) => {
+                  const enabled = !mutedTypes.includes(type);
+                  return (
+                    <div key={type} className="flex items-center justify-between gap-4 p-5 transition-colors hover:bg-muted/40">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                          <Icon size={18} strokeWidth={1.5} />
+                        </div>
+                        <div className="space-y-0.5">
+                          <p className="text-sm font-medium text-foreground">{label}</p>
+                          <p className="text-xs text-muted-foreground text-pretty">{description}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={enabled}
+                        aria-label={`${enabled ? 'Disable' : 'Enable'} ${label} notifications`}
+                        className={`w-11 h-6 shrink-0 rounded-full p-0.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${enabled ? 'bg-primary' : 'bg-muted'}`}
+                        onClick={() => toggleNotificationType(type)}
+                      >
+                        <div className={`h-5 w-5 rounded-full bg-card shadow-sm transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
