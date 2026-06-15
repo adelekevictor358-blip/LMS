@@ -46,6 +46,16 @@ const MOCK_DB = {
 let _idCounter = 0;
 const nextId = () => `${Date.now()}-${(_idCounter = (_idCounter + 1) % 1000000)}`;
 
+// Fisher–Yates shuffle that returns a NEW array (never mutates the input).
+const shuffleArray = (arr = []) => {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
+
 let bc;
 if (typeof window !== 'undefined') {
   bc = new BroadcastChannel('lms_notifications');
@@ -360,34 +370,54 @@ export const useStore = create(
           { id: 1, assignmentId: 3, studentId: 'student-1', studentName: 'Victor Adeleke', content: 'Academic integrity is the foundation of learning...', submittedAt: new Date(Date.now() - 86400000 * 2).toISOString(), score: null, feedback: '' },
         ],
 
-        // Quizzes
+        // Quizzes — rich model (see QUIZ shape). Seed quizzes are normalized to
+        // the new shape: each question carries type/text/options/correct/marks,
+        // `correct` for mcq is the option index, totalMarks = sum of question marks.
+        // Legacy fields kept for backward-compatible UI: `description` (alias of
+        // `instructions`), `createdBy` (alias of `lecturerId`), and each question
+        // still exposes `question` alongside the canonical `text`.
         quizzes: [
           {
-            id: 1, courseId: 1, title: 'PHY104 Week 3 Quiz', description: 'Test your understanding of Newton\'s Laws',
-            createdBy: 'LEC/2024/001', status: 'active', timeLimit: 15,
+            id: 1, courseId: 1, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001',
+            title: 'PHY104 Week 3 Quiz',
+            instructions: 'Test your understanding of Newton\'s Laws', description: 'Test your understanding of Newton\'s Laws',
+            startAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+            endAt: new Date(Date.now() + 86400000 * 14).toISOString(),
+            timeLimit: 15, totalMarks: 5, attemptsAllowed: 1,
+            shuffleQuestions: false, shuffleOptions: false, displayMode: 'all',
+            status: 'published', createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
             questions: [
-              { id: 1, type: 'mcq', question: 'Which of Newton\'s laws states that every action has an equal and opposite reaction?', options: ['First Law', 'Second Law', 'Third Law', 'Law of Gravitation'], correct: 2 },
-              { id: 2, type: 'mcq', question: 'What is the SI unit of force?', options: ['Joule', 'Newton', 'Watt', 'Pascal'], correct: 1 },
-              { id: 3, type: 'mcq', question: 'F = ma represents Newton\'s _____ Law', options: ['First', 'Second', 'Third', 'Fourth'], correct: 1 },
-              { id: 4, type: 'mcq', question: 'A body at rest tends to stay at rest. This is known as?', options: ['Inertia', 'Momentum', 'Velocity', 'Acceleration'], correct: 0 },
-              { id: 5, type: 'mcq', question: 'Which quantity is a vector?', options: ['Mass', 'Speed', 'Time', 'Velocity'], correct: 3 },
+              { id: 1, type: 'mcq', text: 'Which of Newton\'s laws states that every action has an equal and opposite reaction?', question: 'Which of Newton\'s laws states that every action has an equal and opposite reaction?', options: ['First Law', 'Second Law', 'Third Law', 'Law of Gravitation'], correct: 2, marks: 1 },
+              { id: 2, type: 'mcq', text: 'What is the SI unit of force?', question: 'What is the SI unit of force?', options: ['Joule', 'Newton', 'Watt', 'Pascal'], correct: 1, marks: 1 },
+              { id: 3, type: 'mcq', text: 'F = ma represents Newton\'s _____ Law', question: 'F = ma represents Newton\'s _____ Law', options: ['First', 'Second', 'Third', 'Fourth'], correct: 1, marks: 1 },
+              { id: 4, type: 'mcq', text: 'A body at rest tends to stay at rest. This is known as?', question: 'A body at rest tends to stay at rest. This is known as?', options: ['Inertia', 'Momentum', 'Velocity', 'Acceleration'], correct: 0, marks: 1 },
+              { id: 5, type: 'mcq', text: 'Which quantity is a vector?', question: 'Which quantity is a vector?', options: ['Mass', 'Speed', 'Time', 'Velocity'], correct: 3, marks: 1 },
             ]
           },
           {
-            id: 2, courseId: 2, title: 'ICT102 HTML/CSS Quiz', description: 'Basic web technologies assessment',
-            createdBy: 'LEC/2024/001', status: 'active', timeLimit: 20,
+            id: 2, courseId: 2, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001',
+            title: 'ICT102 HTML/CSS Quiz',
+            instructions: 'Basic web technologies assessment', description: 'Basic web technologies assessment',
+            startAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+            endAt: new Date(Date.now() + 86400000 * 14).toISOString(),
+            timeLimit: 20, totalMarks: 5, attemptsAllowed: 1,
+            shuffleQuestions: false, shuffleOptions: false, displayMode: 'all',
+            status: 'published', createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
             questions: [
-              { id: 1, type: 'mcq', question: 'What does HTML stand for?', options: ['HyperText Markup Language', 'High Text Machine Language', 'HyperText Machine Language', 'HyperTool Mark Language'], correct: 0 },
-              { id: 2, type: 'mcq', question: 'Which CSS property is used for text color?', options: ['font-color', 'text-color', 'color', 'foreground'], correct: 2 },
-              { id: 3, type: 'mcq', question: 'Which HTML tag is used for the largest heading?', options: ['<h6>', '<heading>', '<h1>', '<head>'], correct: 2 },
-              { id: 4, type: 'mcq', question: 'Which property makes a flexbox container?', options: ['display: flex', 'flex: row', 'position: flex', 'layout: flex'], correct: 0 },
-              { id: 5, type: 'mcq', question: 'CSS stands for?', options: ['Creative Style Sheets', 'Cascading Style Sheets', 'Computer Style Sheets', 'Colorful Style Sheets'], correct: 1 },
+              { id: 1, type: 'mcq', text: 'What does HTML stand for?', question: 'What does HTML stand for?', options: ['HyperText Markup Language', 'High Text Machine Language', 'HyperText Machine Language', 'HyperTool Mark Language'], correct: 0, marks: 1 },
+              { id: 2, type: 'mcq', text: 'Which CSS property is used for text color?', question: 'Which CSS property is used for text color?', options: ['font-color', 'text-color', 'color', 'foreground'], correct: 2, marks: 1 },
+              { id: 3, type: 'mcq', text: 'Which HTML tag is used for the largest heading?', question: 'Which HTML tag is used for the largest heading?', options: ['<h6>', '<heading>', '<h1>', '<head>'], correct: 2, marks: 1 },
+              { id: 4, type: 'mcq', text: 'Which property makes a flexbox container?', question: 'Which property makes a flexbox container?', options: ['display: flex', 'flex: row', 'position: flex', 'layout: flex'], correct: 0, marks: 1 },
+              { id: 5, type: 'mcq', text: 'CSS stands for?', question: 'CSS stands for?', options: ['Creative Style Sheets', 'Cascading Style Sheets', 'Computer Style Sheets', 'Colorful Style Sheets'], correct: 1, marks: 1 },
             ]
           },
         ],
 
-        // Quiz results per student
+        // Quiz results per student (legacy simple model — kept for old UI)
         quizResults: [],
+
+        // Rich quiz attempts (see ATTEMPT shape)
+        quizAttempts: [],
 
         // Past questions
         pastQuestions: [
@@ -827,10 +857,384 @@ export const useStore = create(
           )
         })),
 
-        // ─── QUIZ ACTIONS ───
-        addQuiz: (quiz) => set((state) => ({
-          quizzes: [...state.quizzes, { ...quiz, id: Date.now(), status: 'active' }]
+        // ─── QUIZ ACTIONS (rich model) ───
+        // Recompute totalMarks as the sum of question marks (ints, default 1).
+        _recalcTotalMarks: (questions = []) =>
+          questions.reduce((sum, q) => sum + (Number.isFinite(q?.marks) ? q.marks : (parseInt(q?.marks, 10) || 0)), 0),
+
+        // Normalize a question to the canonical rich shape.
+        _normalizeQuestion: (q = {}, fallbackId) => {
+          const type = q.type === 'tf' || q.type === 'short' ? q.type : 'mcq';
+          const text = q.text ?? q.question ?? '';
+          const marks = Number.isFinite(q.marks) ? q.marks : (parseInt(q.marks, 10) || 1);
+          let correct = q.correct ?? null;
+          if (type === 'mcq') correct = Number.isFinite(correct) ? correct : (parseInt(correct, 10) || 0);
+          else if (type === 'tf') correct = correct === true || correct === 'true';
+          else correct = q.correct ?? null; // short: model answer or null
+          return {
+            id: q.id ?? fallbackId,
+            type,
+            text,
+            question: text, // legacy alias for existing UI
+            options: type === 'mcq' ? (Array.isArray(q.options) ? q.options : ['', '', '', '']) : [],
+            correct,
+            marks,
+          };
+        },
+
+        // Create a DRAFT quiz owned by the current user. Returns the quiz.
+        addQuiz: (data = {}) => {
+          const { user } = get();
+          const id = Date.now();
+          const questions = (data.questions || []).map((q, i) =>
+            get()._normalizeQuestion(q, id + i + 1)
+          );
+          const totalMarks = get()._recalcTotalMarks(questions);
+          const nowISO = new Date().toISOString();
+          const quiz = {
+            id,
+            courseId: data.courseId ?? null,
+            lecturerId: user?.id ?? null,
+            createdBy: user?.id ?? null, // legacy alias
+            title: data.title ?? '',
+            instructions: data.instructions ?? data.description ?? '',
+            description: data.instructions ?? data.description ?? '', // legacy alias
+            startAt: data.startAt ?? nowISO,
+            endAt: data.endAt ?? new Date(Date.now() + 86400000 * 7).toISOString(),
+            timeLimit: parseInt(data.timeLimit, 10) || 15,
+            totalMarks,
+            attemptsAllowed: parseInt(data.attemptsAllowed, 10) || 1,
+            shuffleQuestions: !!data.shuffleQuestions,
+            shuffleOptions: !!data.shuffleOptions,
+            displayMode: data.displayMode === 'one' ? 'one' : 'all',
+            status: 'draft',
+            questions,
+            createdAt: nowISO,
+          };
+          set((state) => ({ quizzes: [...state.quizzes, quiz] }));
+          return quiz;
+        },
+
+        // Update a quiz. If it has ANY attempt, restrict the patch to { endAt }
+        // (deadline extension) only. Otherwise allow a full edit. Always recompute
+        // totalMarks from questions. Owner-scoped.
+        updateQuiz: (id, patch = {}) => {
+          const state = get();
+          const quiz = state.quizzes.find(q => q.id === id);
+          if (!quiz) return null;
+          if (quiz.lecturerId && state.user && quiz.lecturerId !== state.user.id) return null;
+
+          const hasAttempts = state.quizAttempts.some(a => a.quizId === id);
+          let nextPatch;
+          if (hasAttempts) {
+            nextPatch = patch.endAt ? { endAt: patch.endAt } : {};
+          } else {
+            nextPatch = { ...patch };
+            if (nextPatch.questions) {
+              nextPatch.questions = nextPatch.questions.map((q, i) =>
+                state._normalizeQuestion(q, (Date.now() + i + 1))
+              );
+            }
+            // keep legacy aliases coherent
+            if (nextPatch.instructions !== undefined) nextPatch.description = nextPatch.instructions;
+            if (nextPatch.displayMode !== undefined) nextPatch.displayMode = nextPatch.displayMode === 'one' ? 'one' : 'all';
+          }
+
+          let updated = null;
+          set((s) => ({
+            quizzes: s.quizzes.map(q => {
+              if (q.id !== id) return q;
+              const merged = { ...q, ...nextPatch };
+              merged.totalMarks = s._recalcTotalMarks(merged.questions);
+              updated = merged;
+              return merged;
+            }),
+          }));
+          return updated;
+        },
+
+        // Delete a quiz (owner only) and its attempts.
+        deleteQuiz: (id) => {
+          const state = get();
+          const quiz = state.quizzes.find(q => q.id === id);
+          if (!quiz) return;
+          if (quiz.lecturerId && state.user && quiz.lecturerId !== state.user.id) return;
+          set((s) => ({
+            quizzes: s.quizzes.filter(q => q.id !== id),
+            quizAttempts: s.quizAttempts.filter(a => a.quizId !== id),
+          }));
+        },
+
+        // Publish a draft quiz and notify students.
+        publishQuiz: (id) => {
+          const state = get();
+          const quiz = state.quizzes.find(q => q.id === id);
+          if (!quiz) return null;
+          if (quiz.lecturerId && state.user && quiz.lecturerId !== state.user.id) return null;
+          set((s) => ({
+            quizzes: s.quizzes.map(q => q.id === id ? { ...q, status: 'published' } : q),
+          }));
+          const course = state.courses.find(c => c.id === quiz.courseId);
+          const courseCode = course?.code || 'Course';
+          state.pushNotification({
+            target: 'student',
+            type: 'quiz',
+            text: `New quiz published: "${quiz.title}" (${courseCode})`,
+            link: '/dashboard/quizzes',
+          });
+          return get().quizzes.find(q => q.id === id);
+        },
+
+        // Extend a quiz deadline (owner-scoped via updateQuiz's endAt path).
+        extendQuizDeadline: (id, newEndAtISO) => get().updateQuiz(id, { endAt: newEndAtISO }),
+
+        // Lifecycle status of a quiz relative to now.
+        getQuizStatus: (quiz) => {
+          if (!quiz || quiz.status !== 'published') return 'draft';
+          const now = Date.now();
+          const start = Date.parse(quiz.startAt);
+          const end = Date.parse(quiz.endAt);
+          if (!Number.isNaN(start) && now < start) return 'upcoming';
+          if (!Number.isNaN(end) && now > end) return 'closed';
+          return 'active';
+        },
+
+        // Begin (or resume) the current student's attempt at a quiz.
+        // Returns the attempt, or { error } when blocked.
+        startQuizAttempt: (quizId) => {
+          const state = get();
+          const { user } = state;
+          if (!user) return { error: 'Not signed in.' };
+          const quiz = state.quizzes.find(q => q.id === quizId);
+          if (!quiz) return { error: 'Quiz not found.' };
+          if (state.getQuizStatus(quiz) !== 'active') return { error: 'This quiz is not currently open.' };
+
+          const mine = state.quizAttempts.filter(a => a.quizId === quizId && a.studentId === user.id);
+          const inProgress = mine.find(a => a.status === 'in-progress');
+          if (inProgress) return inProgress; // resume
+
+          const used = mine.length;
+          if (used >= (quiz.attemptsAllowed || 1)) return { error: 'No attempts remaining.' };
+
+          // Question order (optionally shuffled)
+          let questionOrder = quiz.questions.map(q => q.id);
+          if (quiz.shuffleQuestions) questionOrder = shuffleArray(questionOrder);
+
+          // Per-mcq option orders (optionally shuffled)
+          const optionOrders = {};
+          quiz.questions.forEach(q => {
+            if (q.type === 'mcq') {
+              const idxs = q.options.map((_, i) => i);
+              optionOrders[q.id] = quiz.shuffleOptions ? shuffleArray(idxs) : idxs;
+            }
+          });
+
+          const maxScore = state._recalcTotalMarks(quiz.questions);
+          const attempt = {
+            id: nextId(),
+            quizId,
+            studentId: user.id,
+            studentName: user.name,
+            answers: {},
+            questionOrder,
+            optionOrders,
+            autoScore: 0,
+            manualScore: null,
+            totalScore: 0,
+            maxScore,
+            status: 'in-progress',
+            startedAt: new Date().toISOString(),
+            submittedAt: null,
+            timeTakenSec: null,
+            flags: { tabSwitches: 0 },
+          };
+          set((s) => ({ quizAttempts: [...s.quizAttempts, attempt] }));
+          return attempt;
+        },
+
+        // Autosave merged answers; no grading.
+        saveAttemptProgress: (attemptId, answers = {}) => set((state) => ({
+          quizAttempts: state.quizAttempts.map(a =>
+            a.id === attemptId && a.status === 'in-progress'
+              ? { ...a, answers: { ...a.answers, ...answers } }
+              : a
+          ),
         })),
+
+        // Record a tab switch; auto-submit on the 3rd and alert the lecturer.
+        recordTabSwitch: (attemptId) => {
+          const state = get();
+          const attempt = state.quizAttempts.find(a => a.id === attemptId);
+          if (!attempt || attempt.status !== 'in-progress') return;
+          const switches = (attempt.flags?.tabSwitches || 0) + 1;
+          set((s) => ({
+            quizAttempts: s.quizAttempts.map(a =>
+              a.id === attemptId ? { ...a, flags: { ...a.flags, tabSwitches: switches } } : a
+            ),
+          }));
+          if (switches >= 3) {
+            const quiz = state.quizzes.find(q => q.id === attempt.quizId);
+            const fresh = get().quizAttempts.find(a => a.id === attemptId);
+            get().submitQuizAttempt(attemptId, fresh?.answers || {});
+            if (quiz?.lecturerId) {
+              get().pushNotification({
+                recipientId: quiz.lecturerId,
+                type: 'system',
+                text: `Suspicious activity: ${attempt.studentName} switched tabs 3x during "${quiz.title}"`,
+                isUrgent: true,
+              });
+            }
+          }
+        },
+
+        // Finalize an attempt: auto-grade mcq/tf, leave short answers ungraded.
+        submitQuizAttempt: (attemptId, answers = {}) => {
+          const state = get();
+          const attempt = state.quizAttempts.find(a => a.id === attemptId);
+          if (!attempt || attempt.status !== 'in-progress') {
+            return state.quizAttempts.find(a => a.id === attemptId) || null;
+          }
+          const quiz = state.quizzes.find(q => q.id === attempt.quizId);
+          const finalAnswers = { ...attempt.answers, ...answers };
+
+          let autoScore = 0;
+          let maxScore = 0;
+          let hasShort = false;
+          (quiz?.questions || []).forEach(q => {
+            maxScore += q.marks || 0;
+            const ans = finalAnswers[q.id];
+            if (q.type === 'mcq') {
+              if (ans === q.correct) autoScore += q.marks || 0;
+            } else if (q.type === 'tf') {
+              if (ans === q.correct) autoScore += q.marks || 0;
+            } else if (q.type === 'short') {
+              hasShort = true;
+            }
+          });
+
+          const submittedAt = new Date().toISOString();
+          const timeTakenSec = Math.max(
+            0,
+            Math.round((Date.parse(submittedAt) - Date.parse(attempt.startedAt)) / 1000)
+          );
+          const status = hasShort ? 'submitted' : 'graded';
+          const manualScore = null;
+          const totalScore = autoScore; // manual added at grading time
+
+          let result = null;
+          set((s) => ({
+            quizAttempts: s.quizAttempts.map(a => {
+              if (a.id !== attemptId) return a;
+              result = {
+                ...a,
+                answers: finalAnswers,
+                autoScore,
+                manualScore,
+                totalScore,
+                maxScore,
+                status,
+                submittedAt,
+                timeTakenSec,
+              };
+              return result;
+            }),
+          }));
+
+          if (quiz) {
+            get().pushNotification({
+              recipientId: attempt.studentId,
+              type: 'result',
+              text: `Your result for "${quiz.title}" is available`,
+              link: '/dashboard/quizzes',
+            });
+          }
+          return result;
+        },
+
+        // Award per-short-question marks; finalize grading.
+        gradeShortAnswers: (attemptId, marksByQuestionId = {}) => {
+          const state = get();
+          const attempt = state.quizAttempts.find(a => a.id === attemptId);
+          if (!attempt) return null;
+          const quiz = state.quizzes.find(q => q.id === attempt.quizId);
+
+          // Sum manual marks, clamped to each short question's max.
+          let manualScore = 0;
+          (quiz?.questions || []).forEach(q => {
+            if (q.type !== 'short') return;
+            const raw = marksByQuestionId[q.id];
+            const m = Number.isFinite(raw) ? raw : (parseInt(raw, 10) || 0);
+            manualScore += Math.max(0, Math.min(m, q.marks || 0));
+          });
+
+          const totalScore = (attempt.autoScore || 0) + manualScore;
+          let result = null;
+          set((s) => ({
+            quizAttempts: s.quizAttempts.map(a => {
+              if (a.id !== attemptId) return a;
+              result = {
+                ...a,
+                manualScore,
+                totalScore,
+                status: 'graded',
+                shortMarks: { ...(a.shortMarks || {}), ...marksByQuestionId },
+              };
+              return result;
+            }),
+          }));
+
+          if (quiz) {
+            get().pushNotification({
+              recipientId: attempt.studentId,
+              type: 'result',
+              text: `Your "${quiz.title}" has been fully graded`,
+              link: '/dashboard/quizzes',
+            });
+          }
+          return result;
+        },
+
+        // Current student's latest attempt for a quiz, or null.
+        getMyQuizAttempt: (quizId) => {
+          const state = get();
+          const { user } = state;
+          if (!user) return null;
+          const mine = state.quizAttempts.filter(a => a.quizId === quizId && a.studentId === user.id);
+          if (!mine.length) return null;
+          return mine.reduce((latest, a) =>
+            Date.parse(a.startedAt) >= Date.parse(latest.startedAt) ? a : latest
+          );
+        },
+
+        // All attempts for a quiz (lecturer view).
+        getQuizSubmissions: (quizId) =>
+          get().quizAttempts.filter(a => a.quizId === quizId),
+
+        // Aggregate quiz analytics across all quizzes (admin).
+        getQuizAnalytics: () => {
+          const state = get();
+          const quizzes = state.quizzes;
+          const attempts = state.quizAttempts;
+          const totalQuizzes = quizzes.length;
+          const publishedQuizzes = quizzes.filter(q => q.status === 'published').length;
+          const totalAttempts = attempts.length;
+
+          const scored = attempts.filter(a => a.maxScore > 0);
+          const avgScorePct = scored.length
+            ? Math.round(
+                scored.reduce((sum, a) => sum + (a.totalScore / a.maxScore) * 100, 0) / scored.length
+              )
+            : 0;
+
+          const finished = attempts.filter(a => a.status === 'submitted' || a.status === 'graded').length;
+          const completionRatePct = totalAttempts
+            ? Math.round((finished / totalAttempts) * 100)
+            : 0;
+
+          return { totalQuizzes, publishedQuizzes, totalAttempts, avgScorePct, completionRatePct };
+        },
+
+        // ─── LEGACY QUIZ RESULT (simple model — retained so old UI keeps working) ───
         submitQuizResult: (quizId, answers, score) => {
           const { user } = get();
           set((state) => ({
@@ -1458,6 +1862,7 @@ export const useStore = create(
         notifications: state.notifications,
         submissions: state.submissions,
         quizResults: state.quizResults,
+        quizAttempts: state.quizAttempts,
         messages: state.messages,
         lecturerRatings: state.lecturerRatings,
         broadcasts: state.broadcasts,

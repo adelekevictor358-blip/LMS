@@ -3,7 +3,7 @@
 
 import { useStore } from '@/store/useStore';
 import { semesterFromCode, nextSession, nextLevel } from '@/lib/utils';
-import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight, ClipboardCheck, CalendarDays, LockOpen, Lock, RefreshCw, Eye } from 'lucide-react';
+import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight, ClipboardCheck, CalendarDays, LockOpen, Lock, RefreshCw, Eye, FileQuestion, EyeOff, Percent, Target } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -64,6 +64,13 @@ export default function AdminDashboard() {
   const overrideLecturerReg = useStore(state => state.overrideLecturerReg);
   const revokeOverrideLecturerReg = useStore(state => state.revokeOverrideLecturerReg);
   const getLecturerRegisteredCourses = useStore(state => state.getLecturerRegisteredCourses);
+
+  // ── Quiz oversight store selectors ──
+  const quizzes = useStore(state => state.quizzes);
+  const quizAttempts = useStore(state => state.quizAttempts);
+  const getQuizAnalytics = useStore(state => state.getQuizAnalytics);
+  const deleteQuiz = useStore(state => state.deleteQuiz);
+  const updateQuiz = useStore(state => state.updateQuiz);
 
   useEffect(() => {
     setMounted(true);
@@ -197,6 +204,9 @@ export default function AdminDashboard() {
               </TabsTrigger>
               <TabsTrigger value="lecturer-reg" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
                 <ClipboardCheck className="h-4 w-4" /> Course Reg
+              </TabsTrigger>
+              <TabsTrigger value="quizzes" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
+                <FileQuestion className="h-4 w-4" /> Quizzes
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1053,7 +1063,7 @@ export default function AdminDashboard() {
               <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
                 <div>
                   <CardTitle className="text-lg font-semibold">Lecturer Status</CardTitle>
-                  <CardDescription className="text-sm">Track who has registered and who hasn't.</CardDescription>
+                  <CardDescription className="text-sm">Track who has registered and who hasn&apos;t.</CardDescription>
                 </div>
                 <div className="relative w-56">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1200,6 +1210,156 @@ export default function AdminDashboard() {
                 ));
               })()}
             </div>
+          </TabsContent>
+
+          <TabsContent value="quizzes" className="space-y-6">
+            {(() => {
+              const analytics = getQuizAnalytics();
+              const analyticsCards = [
+                { label: 'Total quizzes', value: analytics.totalQuizzes, detail: 'Across all courses', icon: FileQuestion },
+                { label: 'Published', value: analytics.publishedQuizzes, detail: 'Live to students', icon: CheckCircle },
+                { label: 'Total attempts', value: analytics.totalAttempts, detail: 'Submissions started', icon: ClipboardCheck },
+                { label: 'Average score', value: `${analytics.avgScorePct}%`, detail: 'Across graded attempts', icon: Target },
+                { label: 'Completion rate', value: `${analytics.completionRatePct}%`, detail: 'Submitted or graded', icon: Percent },
+              ];
+
+              const removeQuiz = (quiz) => {
+                if (!confirm(`Permanently remove "${quiz.title}"? This deletes the quiz and every attempt. This cannot be undone.`)) return;
+                deleteQuiz(quiz.id);
+                if (useStore.getState().quizzes.some(q => q.id === quiz.id)) {
+                  alert(`Could not remove "${quiz.title}". It is owned by another account and only its owner can delete it.`);
+                }
+              };
+
+              const unpublishQuiz = (quiz) => {
+                const attemptCount = quizAttempts.filter(a => a.quizId === quiz.id).length;
+                if (attemptCount > 0) {
+                  alert(`"${quiz.title}" already has ${attemptCount} attempt${attemptCount === 1 ? '' : 's'}, so it can no longer be unpublished (content edits are locked once students attempt it). Use Remove to delete it entirely.`);
+                  return;
+                }
+                if (!confirm(`Deactivate "${quiz.title}"? It returns to draft and is hidden from students until republished.`)) return;
+                const result = updateQuiz(quiz.id, { status: 'draft' });
+                if (!result || result.status !== 'draft') {
+                  alert(`Could not deactivate "${quiz.title}". It is owned by another account and only its owner can change its status. Use Remove to delete it instead.`);
+                }
+              };
+
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+                    {analyticsCards.map((stat, i) => (
+                      <Card key={i} className="rounded-xl border border-border bg-card shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-muted-foreground">{stat.label}</p>
+                              <h3 className="mt-2 text-2xl font-semibold tabular-nums text-foreground">{stat.value}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">{stat.detail}</p>
+                            </div>
+                            <div className="h-10 w-10 shrink-0 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                              <stat.icon className="h-5 w-5" strokeWidth={1.5} />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  <Card className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <CardHeader className="border-b border-border">
+                      <CardTitle className="text-lg font-semibold">All quizzes</CardTitle>
+                      <CardDescription className="text-sm">Every quiz across courses and lecturers. Remove a quiz or deactivate it back to draft.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {quizzes.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                          <FileQuestion className="h-9 w-9 text-muted-foreground" strokeWidth={1.5} />
+                          <p className="text-sm text-muted-foreground">No quizzes have been created yet.</p>
+                        </div>
+                      ) : (
+                        <Table>
+                          <TableHeader className="bg-muted/50">
+                            <TableRow className="border-border">
+                              <TableHead className="py-4 px-6 text-xs font-medium text-muted-foreground">Course</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Quiz</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Lecturer</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Status</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-center">Questions</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-center">Submissions</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right px-6">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {quizzes.slice().reverse().map(quiz => {
+                              const course = courses.find(c => c.id === quiz.courseId);
+                              const lecturer = allUsers.find(u => u.id === quiz.lecturerId || u.id === quiz.createdBy);
+                              const lecturerName = lecturer?.name || course?.lecturerName || 'Unassigned';
+                              const isPublished = quiz.status === 'published';
+                              const questionCount = quiz.questions?.length || 0;
+                              const submissionCount = quizAttempts.filter(a => a.quizId === quiz.id).length;
+                              return (
+                                <TableRow key={quiz.id} className="border-border transition-colors hover:bg-muted/40">
+                                  <TableCell className="py-4 px-6">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-9 w-9 rounded-md flex items-center justify-center text-white text-[10px] font-semibold" style={{ backgroundColor: course?.color || '#3b82f6' }}>
+                                        {(course?.code || 'QZ').split(' ')[0].substring(0, 3)}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-foreground leading-none">{course?.code || '—'}</p>
+                                        <p className="text-xs text-muted-foreground mt-1.5 truncate max-w-[160px]">{course?.title || 'Unknown course'}</p>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{quiz.title}</p>
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm text-muted-foreground truncate max-w-[160px]">{lecturerName}</p>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={`capitalize border-transparent ${isPublished ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+                                      {quiz.status || 'draft'}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <span className="text-sm tabular-nums text-foreground">{questionCount}</span>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <span className="text-sm tabular-nums text-foreground">{submissionCount}</span>
+                                  </TableCell>
+                                  <TableCell className="text-right px-6">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {isPublished && (
+                                        <Button
+                                          variant="ghost" size="sm"
+                                          className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-warning"
+                                          title="Deactivate (return to draft)"
+                                          onClick={() => unpublishQuiz(quiz)}
+                                        >
+                                          <EyeOff size={14} /> Deactivate
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="ghost" size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        title="Remove quiz"
+                                        onClick={() => removeQuiz(quiz)}
+                                      >
+                                        <Trash2 size={16} />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              );
+            })()}
           </TabsContent>
         </Tabs>
       </main>
