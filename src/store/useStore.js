@@ -338,13 +338,18 @@ export const useStore = create(
           { id: 1, title: 'PHY104 Final Exam', date: new Date(Date.now() + 86400000 * 2).toISOString() }
         ],
 
-        // Materials uploaded by lecturers
+        // Materials uploaded by lecturers.
+        // New shape: { id, courseId, lecturerId, title, description, week, type
+        //   ('note'|'slide'|'assignment'|'reference'|'video'|'other'), url,
+        //   fileData, fileName, fileSize (bytes), visible, createdAt(ISO) }.
+        // Legacy aliases (uploadedBy, size, date, and the old `type` value) are
+        // kept on each record so existing pages keep rendering unchanged.
         materials: [
-          { id: 1, courseId: 1, title: 'Introduction to Mechanics', type: 'pdf', url: '#', size: '2.4 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-10' },
-          { id: 2, courseId: 1, title: 'Wave Theory Lecture Notes', type: 'pdf', url: '#', size: '1.8 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-12' },
-          { id: 3, courseId: 2, title: 'HTML5 Fundamentals', type: 'pdf', url: '#', size: '3.1 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-08' },
-          { id: 4, courseId: 2, title: 'CSS Grid & Flexbox Video', type: 'video', url: '#', size: '120 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-14' },
-          { id: 5, courseId: 3, title: 'Academic Writing Guide', type: 'pdf', url: '#', size: '1.2 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-09' },
+          { id: 1, courseId: 1, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'Introduction to Mechanics', description: '', week: 'Week 1', type: 'note', url: '#', fileData: null, fileName: null, fileSize: null, size: '2.4 MB', visible: true, createdAt: '2026-04-10T09:00:00.000Z', date: '2026-04-10' },
+          { id: 2, courseId: 1, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'Wave Theory Lecture Notes', description: '', week: 'Week 3', type: 'note', url: '#', fileData: null, fileName: null, fileSize: null, size: '1.8 MB', visible: true, createdAt: '2026-04-12T09:00:00.000Z', date: '2026-04-12' },
+          { id: 3, courseId: 2, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'HTML5 Fundamentals', description: '', week: 'Week 1', type: 'slide', url: '#', fileData: null, fileName: null, fileSize: null, size: '3.1 MB', visible: true, createdAt: '2026-04-08T09:00:00.000Z', date: '2026-04-08' },
+          { id: 4, courseId: 2, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'CSS Grid & Flexbox Video', description: '', week: 'Week 2', type: 'video', url: '#', fileData: null, fileName: null, fileSize: null, size: '120 MB', visible: true, createdAt: '2026-04-14T09:00:00.000Z', date: '2026-04-14' },
+          { id: 5, courseId: 3, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'Academic Writing Guide', description: '', week: 'Week 1', type: 'reference', url: '#', fileData: null, fileName: null, fileSize: null, size: '1.2 MB', visible: true, createdAt: '2026-04-09T09:00:00.000Z', date: '2026-04-09' },
         ],
 
         // Library / textbooks per course
@@ -419,12 +424,20 @@ export const useStore = create(
         // Rich quiz attempts (see ATTEMPT shape)
         quizAttempts: [],
 
-        // Past questions
+        // Past questions — CROSS-DEPARTMENT (not registration-gated). New shape:
+        // { id, courseCode, courseTitle, year, semester ('1st'|'2nd'),
+        //   examType ('mid'|'final'), url, fileData, fileName, fileSize,
+        //   answerSchemeUrl, answerSchemeData, answerSchemeName,
+        //   answerSchemeVisible(bool, default false), uploadedBy, uploaderName,
+        //   uploaderRole, visible(bool, default true), createdAt(ISO) }.
+        // Seeded with EXTERNAL url placeholders (never large base64). The legacy
+        // `questions: []` / `type` / `semester` fields are retained as harmless
+        // aliases so any older list UI does not crash on the new records.
         pastQuestions: [
-          { id: 1, courseId: 1, year: '2024/2025', semester: 'First', type: 'Theory', questions: ['Define Newton\'s first law of motion and give two examples.', 'A car of mass 1200kg accelerates at 3m/s². Calculate the force applied.', 'Distinguish between scalar and vector quantities with examples.', 'State and explain the principle of conservation of momentum.', 'A ball is thrown vertically upward with velocity 20m/s. Find the maximum height reached. (g = 10m/s²)'] },
-          { id: 2, courseId: 1, year: '2023/2024', semester: 'Second', type: 'Theory', questions: ['What is the difference between mass and weight?', 'Explain uniform circular motion with a real-life example.', 'State Hooke\'s Law. What is the spring constant?', 'Describe simple harmonic motion. Give two examples.', 'Calculate the work done when a force of 50N moves an object 10m.'] },
-          { id: 3, courseId: 2, year: '2024/2025', semester: 'First', type: 'Practical', questions: ['Build a complete HTML form with validation using JavaScript.', 'Demonstrate the difference between inline and block elements.', 'Create a responsive 3-column layout using CSS Grid.', 'Write JavaScript to fetch data from an API and display it.', 'Style a navigation bar using Flexbox.'] },
-          { id: 4, courseId: 3, year: '2024/2025', semester: 'First', type: 'Theory', questions: ['What is academic writing? List its key features.', 'Explain the difference between denotation and connotation.', 'Write a formal letter to your HOD requesting an extension.', 'What is plagiarism? How can it be avoided?', 'Define register. Give examples of formal and informal register.'] },
+          { id: 1, courseCode: 'PHY104', courseTitle: 'Practical Physics II', year: '2024/2025', semester: '1st', examType: 'final', url: 'https://drive.google.com/file/d/EXAMPLE_PHY104_FINAL/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: '', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: false, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-01T09:00:00.000Z', type: 'Theory', questions: [] },
+          { id: 2, courseCode: 'CSC101', courseTitle: 'Introduction to Computer Science', year: '2023/2024', semester: '2nd', examType: 'final', url: 'https://drive.google.com/file/d/EXAMPLE_CSC101_FINAL/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: 'https://drive.google.com/file/d/EXAMPLE_CSC101_SCHEME/view', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: true, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-02T09:00:00.000Z', type: 'Theory', questions: [] },
+          { id: 3, courseCode: 'MTH101', courseTitle: 'Elementary Mathematics II', year: '2024/2025', semester: '1st', examType: 'mid', url: 'https://drive.google.com/file/d/EXAMPLE_MTH101_MID/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: '', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: false, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-03T09:00:00.000Z', type: 'Theory', questions: [] },
+          { id: 4, courseCode: 'GST111', courseTitle: 'Communication in English I', year: '2022/2023', semester: '1st', examType: 'final', url: 'https://drive.google.com/file/d/EXAMPLE_GST111_FINAL/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: '', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: false, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-04T09:00:00.000Z', type: 'Theory', questions: [] },
         ],
 
         // Direct messages between users
@@ -649,25 +662,122 @@ export const useStore = create(
         })),
 
         // ─── MATERIAL ACTIONS ───
-        addMaterial: (material) => {
-          const { user, courses, broadcastAlert } = get();
-          const newMaterial = { 
-            ...material, 
-            id: Date.now(), 
-            date: new Date().toISOString().split('T')[0] 
-          };
-          
-          set((state) => ({
-            materials: [...state.materials, newMaterial]
-          }));
-
-          // Notify students of the new material
-          const course = courses.find(c => c.id === material.courseId);
-          broadcastAlert(`New material uploaded for ${course?.code || 'your course'}: ${material.title}`, false);
+        // Allowed material types in the new model. Unknown values fall back to
+        // 'other' (legacy values like 'pdf'/'slides'/'document'/'link' map below).
+        _MATERIAL_TYPES: ['note', 'slide', 'assignment', 'reference', 'video', 'other'],
+        _normalizeMaterialType: (t) => {
+          const map = { pdf: 'note', document: 'note', slides: 'slide', slide: 'slide', link: 'reference', note: 'note', assignment: 'assignment', reference: 'reference', video: 'video', other: 'other' };
+          return map[t] || 'other';
         },
-        deleteMaterial: (id) => set((state) => ({
-          materials: state.materials.filter(m => m.id !== id)
-        })),
+
+        // Add a material owned by the CURRENT lecturer. Accepts an external `url`
+        // OR a small base64 `fileData`. Stamps lecturerId from the signed-in user
+        // and notifies students. Legacy aliases (uploadedBy/size/date) are kept so
+        // existing pages keep rendering.
+        addMaterial: (data = {}) => {
+          const state = get();
+          const { user, courses } = state;
+          const nowISO = new Date().toISOString();
+          const type = state._normalizeMaterialType(data.type);
+          const fileSize = Number.isFinite(data.fileSize) ? data.fileSize : (parseInt(data.fileSize, 10) || null);
+          const newMaterial = {
+            id: nextId(),
+            courseId: typeof data.courseId === 'string' ? (parseInt(data.courseId, 10) || data.courseId) : data.courseId,
+            lecturerId: user?.id ?? data.lecturerId ?? null,
+            uploadedBy: user?.id ?? data.lecturerId ?? null, // legacy alias
+            title: data.title ?? '',
+            description: data.description ?? '',
+            week: data.week ?? '',
+            type,
+            url: data.url ?? null,
+            fileData: data.fileData ?? null,
+            fileName: data.fileName ?? null,
+            fileSize,
+            visible: data.visible ?? true,
+            createdAt: nowISO,
+            // legacy aliases retained for current Library / Materials pages
+            size: data.size ?? (fileSize ? `${(fileSize / (1024 * 1024)).toFixed(2)} MB` : ''),
+            date: nowISO.split('T')[0],
+          };
+
+          set((s) => ({ materials: [...s.materials, newMaterial] }));
+
+          const course = courses.find(c => c.id === newMaterial.courseId);
+          const courseCode = course?.code || 'your course';
+          state.pushNotification({
+            target: 'student',
+            type: 'material',
+            text: `New material "${newMaterial.title}" for ${courseCode}`,
+            link: '/dashboard/library',
+          });
+          return newMaterial;
+        },
+
+        // Patch a material (owner only). Re-derives the `size` legacy alias when
+        // fileSize changes; keeps the type normalized.
+        updateMaterial: (id, patch = {}) => {
+          const state = get();
+          const mat = state.materials.find(m => m.id === id);
+          if (!mat) return null;
+          const owner = mat.lecturerId ?? mat.uploadedBy;
+          if (owner && state.user && owner !== state.user.id) return null;
+          const next = { ...patch };
+          if (next.type !== undefined) next.type = state._normalizeMaterialType(next.type);
+          if (next.fileSize !== undefined) {
+            next.fileSize = Number.isFinite(next.fileSize) ? next.fileSize : (parseInt(next.fileSize, 10) || null);
+            if (next.size === undefined) next.size = next.fileSize ? `${(next.fileSize / (1024 * 1024)).toFixed(2)} MB` : '';
+          }
+          let updated = null;
+          set((s) => ({
+            materials: s.materials.map(m => {
+              if (m.id !== id) return m;
+              updated = { ...m, ...next, id: m.id, lecturerId: m.lecturerId, uploadedBy: m.uploadedBy, createdAt: m.createdAt };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        deleteMaterial: (id) => {
+          const state = get();
+          const mat = state.materials.find(m => m.id === id);
+          if (!mat) return;
+          const owner = mat.lecturerId ?? mat.uploadedBy;
+          if (owner && state.user && owner !== state.user.id) return;
+          set((s) => ({ materials: s.materials.filter(m => m.id !== id) }));
+        },
+
+        toggleMaterialVisibility: (id) => {
+          const state = get();
+          const mat = state.materials.find(m => m.id === id);
+          if (!mat) return;
+          const owner = mat.lecturerId ?? mat.uploadedBy;
+          if (owner && state.user && owner !== state.user.id) return;
+          set((s) => ({
+            materials: s.materials.map(m =>
+              m.id === id ? { ...m, visible: m.visible === false ? true : false } : m
+            ),
+          }));
+        },
+
+        // All materials for a course. Hidden (visible === false) are filtered out
+        // unless includeHidden is true (lecturer/admin views).
+        getCourseMaterials: (courseId, includeHidden = false) => {
+          const state = get();
+          return state.materials.filter(m =>
+            String(m.courseId) === String(courseId) && (includeHidden || m.visible !== false)
+          );
+        },
+
+        // Total bytes of a lecturer's materials that carry inline base64 fileData.
+        getLecturerStorageUsage: (lecturerId) => {
+          const state = get();
+          return state.materials.reduce((sum, m) => {
+            const owner = m.lecturerId ?? m.uploadedBy;
+            if (owner !== lecturerId || !m.fileData) return sum;
+            return sum + (Number.isFinite(m.fileSize) ? m.fileSize : 0);
+          }, 0);
+        },
 
         // ─── LIVE CLASSROOM ACTIONS ───
         liveSessions: [],
@@ -1258,9 +1368,160 @@ export const useStore = create(
         })),
 
         // ─── PAST QUESTION ACTIONS ───
-        addPastQuestion: (pq) => set((state) => ({
-          pastQuestions: [...state.pastQuestions, { ...pq, id: Date.now() }]
-        })),
+        // Build a normalized past-question record from raw data. uploader fields
+        // come from the current user unless explicitly supplied (used by bulk add).
+        _buildPastQuestion: (data = {}, uploader = null) => {
+          const nowISO = new Date().toISOString();
+          const fileSize = Number.isFinite(data.fileSize) ? data.fileSize : (parseInt(data.fileSize, 10) || null);
+          const asFileSize = Number.isFinite(data.answerSchemeSize) ? data.answerSchemeSize : (parseInt(data.answerSchemeSize, 10) || null);
+          return {
+            id: nextId(),
+            courseCode: data.courseCode ?? '',
+            courseTitle: data.courseTitle ?? '',
+            year: data.year ?? '',
+            semester: data.semester === '2nd' ? '2nd' : '1st',
+            examType: data.examType === 'mid' ? 'mid' : 'final',
+            url: data.url ?? null,
+            fileData: data.fileData ?? null,
+            fileName: data.fileName ?? null,
+            fileSize,
+            answerSchemeUrl: data.answerSchemeUrl ?? '',
+            answerSchemeData: data.answerSchemeData ?? null,
+            answerSchemeName: data.answerSchemeName ?? null,
+            answerSchemeSize: asFileSize,
+            answerSchemeVisible: data.answerSchemeVisible ?? false,
+            uploadedBy: data.uploadedBy ?? uploader?.id ?? null,
+            uploaderName: data.uploaderName ?? uploader?.name ?? null,
+            uploaderRole: data.uploaderRole ?? uploader?.role ?? null,
+            visible: data.visible ?? true,
+            createdAt: nowISO,
+            // harmless legacy aliases so any older list UI doesn't crash
+            type: data.type ?? 'Theory',
+            questions: Array.isArray(data.questions) ? data.questions : [],
+          };
+        },
+
+        // Add a single past question, attributed to the current user.
+        addPastQuestion: (data = {}) => {
+          const state = get();
+          const pq = state._buildPastQuestion(data, state.user);
+          set((s) => ({ pastQuestions: [...s.pastQuestions, pq] }));
+          state.pushNotification({
+            target: 'student',
+            type: 'pastq',
+            text: `New past question added for ${pq.courseCode || 'a course'}`,
+            link: '/dashboard/past-questions',
+          });
+          return pq;
+        },
+
+        // Admin bulk add. Builds many records at once; fires ONE summary
+        // notification rather than spamming students per-item.
+        addPastQuestionsBulk: (items = []) => {
+          const state = get();
+          if (!Array.isArray(items) || items.length === 0) return [];
+          const built = items.map(it => state._buildPastQuestion(it, state.user));
+          set((s) => ({ pastQuestions: [...s.pastQuestions, ...built] }));
+          state.pushNotification({
+            target: 'student',
+            type: 'pastq',
+            text: `${built.length} new past question${built.length !== 1 ? 's' : ''} added`,
+            link: '/dashboard/past-questions',
+          });
+          return built;
+        },
+
+        // Patch a past question (owner or admin only).
+        updatePastQuestion: (id, patch = {}) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return null;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return null;
+          const next = { ...patch };
+          if (next.semester !== undefined) next.semester = next.semester === '2nd' ? '2nd' : '1st';
+          if (next.examType !== undefined) next.examType = next.examType === 'mid' ? 'mid' : 'final';
+          let updated = null;
+          set((s) => ({
+            pastQuestions: s.pastQuestions.map(p => {
+              if (p.id !== id) return p;
+              updated = { ...p, ...next, id: p.id, uploadedBy: p.uploadedBy, createdAt: p.createdAt };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        // Delete a past question (owner or admin only).
+        deletePastQuestion: (id) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return;
+          set((s) => ({ pastQuestions: s.pastQuestions.filter(p => p.id !== id) }));
+        },
+
+        togglePastQuestionVisibility: (id) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return;
+          set((s) => ({
+            pastQuestions: s.pastQuestions.map(p =>
+              p.id === id ? { ...p, visible: p.visible === false ? true : false } : p
+            ),
+          }));
+        },
+
+        toggleAnswerSchemeVisibility: (id) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return;
+          set((s) => ({
+            pastQuestions: s.pastQuestions.map(p =>
+              p.id === id ? { ...p, answerSchemeVisible: !p.answerSchemeVisible } : p
+            ),
+          }));
+        },
+
+        // All VISIBLE past questions (students/admin). Cross-department — NOT
+        // gated by registration/level. Newest first.
+        getPastQuestions: () => {
+          const state = get();
+          return state.pastQuestions
+            .filter(p => p.visible !== false)
+            .sort((a, b) => {
+              const ta = Date.parse(a.createdAt);
+              const tb = Date.parse(b.createdAt);
+              if (!Number.isNaN(ta) && !Number.isNaN(tb)) return tb - ta;
+              return 0;
+            });
+        },
+
+        // Total inline-base64 bytes across BOTH materials and past questions
+        // (admin storage gauge). Counts fileData (+ answer-scheme data) sizes.
+        getTotalStorageUsage: () => {
+          const state = get();
+          const matBytes = state.materials.reduce(
+            (sum, m) => sum + (m.fileData && Number.isFinite(m.fileSize) ? m.fileSize : 0),
+            0
+          );
+          const pqBytes = state.pastQuestions.reduce((sum, p) => {
+            let s = 0;
+            if (p.fileData && Number.isFinite(p.fileSize)) s += p.fileSize;
+            if (p.answerSchemeData && Number.isFinite(p.answerSchemeSize)) s += p.answerSchemeSize;
+            return sum + s;
+          }, 0);
+          return matBytes + pqBytes;
+        },
 
         // ─── MESSAGE ACTIONS ───
         sendMessage: (toId, toName, content) => {
@@ -1869,6 +2130,7 @@ export const useStore = create(
         sessionMessages: state.sessionMessages,
         callHistory: state.callHistory,
         materials: state.materials,
+        pastQuestions: state.pastQuestions,
         lecturerCourseRegWindow: state.lecturerCourseRegWindow,
         lecturerCourseRegistrations: state.lecturerCourseRegistrations,
         lecturerRegOverrides: state.lecturerRegOverrides,

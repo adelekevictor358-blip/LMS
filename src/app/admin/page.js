@@ -3,7 +3,7 @@
 
 import { useStore } from '@/store/useStore';
 import { semesterFromCode, nextSession, nextLevel } from '@/lib/utils';
-import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight, ClipboardCheck, CalendarDays, LockOpen, Lock, RefreshCw, Eye, FileQuestion, EyeOff, Percent, Target } from 'lucide-react';
+import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight, ClipboardCheck, CalendarDays, LockOpen, Lock, RefreshCw, Eye, FileQuestion, EyeOff, Percent, Target, Library, HardDrive, Link2 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -72,6 +72,16 @@ export default function AdminDashboard() {
   const deleteQuiz = useStore(state => state.deleteQuiz);
   const updateQuiz = useStore(state => state.updateQuiz);
 
+  // ── Resources oversight store selectors (materials + past questions) ──
+  const materials = useStore(state => state.materials);
+  const pastQuestions = useStore(state => state.pastQuestions);
+  const deleteMaterial = useStore(state => state.deleteMaterial);
+  const deletePastQuestion = useStore(state => state.deletePastQuestion);
+  const toggleAnswerSchemeVisibility = useStore(state => state.toggleAnswerSchemeVisibility);
+  const addPastQuestion = useStore(state => state.addPastQuestion);
+  const getTotalStorageUsage = useStore(state => state.getTotalStorageUsage);
+  const getLecturerStorageUsage = useStore(state => state.getLecturerStorageUsage);
+
   useEffect(() => {
     setMounted(true);
     const userId = user?.id;
@@ -111,6 +121,10 @@ export default function AdminDashboard() {
   const [adminCourseSemesterFilter, setAdminCourseSemesterFilter] = useState('all');
   const [adminCourseProgramFilter, setAdminCourseProgramFilter] = useState('all');
   const [appointingCourseId, setAppointingCourseId] = useState(null);
+
+  // Resources oversight — Add past question form state
+  const [isAddPqOpen, setIsAddPqOpen] = useState(false);
+  const [newPq, setNewPq] = useState({ courseCode: '', courseTitle: '', year: '', semester: '1st', examType: 'final', url: '', answerSchemeUrl: '' });
 
   // Lecturer Course Reg admin state
   const [lcrStartDate, setLcrStartDate] = useState('');
@@ -207,6 +221,9 @@ export default function AdminDashboard() {
               </TabsTrigger>
               <TabsTrigger value="quizzes" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
                 <FileQuestion className="h-4 w-4" /> Quizzes
+              </TabsTrigger>
+              <TabsTrigger value="resources" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
+                <Library className="h-4 w-4" /> Resources
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1344,6 +1361,355 @@ export default function AdminDashboard() {
                                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                         title="Remove quiz"
                                         onClick={() => removeQuiz(quiz)}
+                                      >
+                                        <Trash2 size={16} />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              );
+            })()}
+          </TabsContent>
+
+          <TabsContent value="resources" className="space-y-6">
+            {(() => {
+              const fmtBytes = (bytes) => {
+                const b = Number.isFinite(bytes) ? bytes : 0;
+                if (b <= 0) return '0 KB';
+                if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+                return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+              };
+              const STORAGE_CAP = 5 * 1024 * 1024; // ~5MB localStorage budget
+              const totalBytes = getTotalStorageUsage();
+              const usedPct = Math.min(100, Math.round((totalBytes / STORAGE_CAP) * 100));
+
+              // Per-lecturer inline usage (only lecturers that actually carry inline files)
+              const lecturerUsage = faculty
+                .map(l => ({ id: l.id, name: l.name, bytes: getLecturerStorageUsage(l.id) }))
+                .filter(l => l.bytes > 0)
+                .sort((a, b) => b.bytes - a.bytes);
+
+              const courseLabel = (courseId) => {
+                const c = courses.find(co => String(co.id) === String(courseId));
+                return c ? { code: c.code, title: c.title, color: c.color } : { code: '—', title: 'Unknown course', color: '#3b82f6' };
+              };
+              const lecturerLabel = (m) => {
+                const owner = m.lecturerId ?? m.uploadedBy;
+                const u = allUsers.find(x => x.id === owner);
+                return u?.name || owner || 'Unassigned';
+              };
+
+              const removeMaterial = (m) => {
+                if (!confirm(`Remove material "${m.title}"? This cannot be undone.`)) return;
+                deleteMaterial(m.id);
+                if (useStore.getState().materials.some(x => x.id === m.id)) {
+                  alert(`Could not remove "${m.title}". It is owned by a lecturer and only its owner can delete it.`);
+                }
+              };
+              const removePastQuestion = (p) => {
+                if (!confirm(`Remove past question for "${p.courseCode}" (${p.year})? This cannot be undone.`)) return;
+                deletePastQuestion(p.id);
+              };
+
+              const submitPq = () => {
+                if (!newPq.courseCode.trim()) { alert('Enter a course code.'); return; }
+                if (!newPq.url.trim()) { alert('Paste an external link to the question paper (Google Drive, etc.). Files are not stored on a server.'); return; }
+                addPastQuestion({
+                  courseCode: newPq.courseCode.trim(),
+                  courseTitle: newPq.courseTitle.trim(),
+                  year: newPq.year.trim(),
+                  semester: newPq.semester,
+                  examType: newPq.examType,
+                  url: newPq.url.trim(),
+                  answerSchemeUrl: newPq.answerSchemeUrl.trim(),
+                });
+                setNewPq({ courseCode: '', courseTitle: '', year: '', semester: '1st', examType: 'final', url: '', answerSchemeUrl: '' });
+                setIsAddPqOpen(false);
+                alert('Past question added.');
+              };
+
+              const sortedMaterials = materials.slice().reverse();
+              const sortedPqs = pastQuestions.slice().reverse();
+
+              return (
+                <>
+                  {/* Storage usage summary */}
+                  <Card className="rounded-xl border border-border bg-card shadow-sm">
+                    <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                      <div>
+                        <CardTitle className="text-lg font-semibold">Storage usage</CardTitle>
+                        <CardDescription className="text-sm">
+                          This app has no server. Inline uploads live in the browser&apos;s ~5MB store — prefer external links.
+                        </CardDescription>
+                      </div>
+                      <div className="h-10 w-10 shrink-0 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                        <HardDrive className="h-5 w-5" strokeWidth={1.5} />
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex flex-wrap items-end justify-between gap-3">
+                        <div>
+                          <p className="text-2xl font-semibold tabular-nums text-foreground">{fmtBytes(totalBytes)}</p>
+                          <p className="text-xs text-muted-foreground">of ~5 MB inline budget used</p>
+                        </div>
+                        <Badge variant="secondary" className={`font-medium tabular-nums ${usedPct >= 80 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'}`}>
+                          {usedPct}% used
+                        </Badge>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full transition-all ${usedPct >= 80 ? 'bg-destructive' : 'bg-primary'}`}
+                          style={{ width: `${Math.max(2, usedPct)}%` }}
+                        />
+                      </div>
+                      {lecturerUsage.length > 0 && (
+                        <div className="rounded-md border border-border bg-muted/40 p-4">
+                          <p className="mb-2 text-xs font-medium text-muted-foreground">Inline usage by lecturer</p>
+                          <div className="flex flex-col gap-1.5">
+                            {lecturerUsage.map(l => (
+                              <div key={l.id} className="flex items-center justify-between text-sm">
+                                <span className="text-foreground truncate pr-3">{l.name}</span>
+                                <span className="tabular-nums text-muted-foreground">{fmtBytes(l.bytes)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* All course materials */}
+                  <Card className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <CardHeader className="border-b border-border">
+                      <CardTitle className="text-lg font-semibold">All course materials</CardTitle>
+                      <CardDescription className="text-sm">Every uploaded material across courses. Lecturer-owned items can only be removed by their owner.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {sortedMaterials.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                          <BookOpen className="h-9 w-9 text-muted-foreground" strokeWidth={1.5} />
+                          <p className="text-sm text-muted-foreground">No materials have been uploaded yet.</p>
+                        </div>
+                      ) : (
+                        <Table>
+                          <TableHeader className="bg-muted/50">
+                            <TableRow className="border-border">
+                              <TableHead className="py-4 px-6 text-xs font-medium text-muted-foreground">Course</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Title</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Lecturer</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Type</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Visible</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right px-6">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sortedMaterials.map(m => {
+                              const c = courseLabel(m.courseId);
+                              const isVisible = m.visible !== false;
+                              return (
+                                <TableRow key={m.id} className="border-border transition-colors hover:bg-muted/40">
+                                  <TableCell className="py-4 px-6">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-9 w-9 rounded-md flex items-center justify-center text-white text-[10px] font-semibold" style={{ backgroundColor: c.color || '#3b82f6' }}>
+                                        {(c.code || 'MT').split(' ')[0].substring(0, 3)}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-foreground leading-none">{c.code}</p>
+                                        <p className="text-xs text-muted-foreground mt-1.5 truncate max-w-[160px]">{c.title}</p>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{m.title}</p>
+                                    {m.week && <p className="text-xs text-muted-foreground mt-0.5">{m.week}</p>}
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm text-muted-foreground truncate max-w-[160px]">{lecturerLabel(m)}</p>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="capitalize border-border text-xs">{m.type || 'other'}</Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${isVisible ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+                                      {isVisible ? <Eye size={11} /> : <EyeOff size={11} />}
+                                      {isVisible ? 'Visible' : 'Hidden'}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-right px-6">
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                      title="Remove material"
+                                      onClick={() => removeMaterial(m)}
+                                    >
+                                      <Trash2 size={16} />
+                                    </Button>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* All past questions */}
+                  <Card className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 border-b border-border">
+                      <div>
+                        <CardTitle className="text-lg font-semibold">All past questions</CardTitle>
+                        <CardDescription className="text-sm">Cross-department archive. Toggle answer-scheme visibility or remove an entry.</CardDescription>
+                      </div>
+                      <Dialog open={isAddPqOpen} onOpenChange={setIsAddPqOpen}>
+                        <DialogTrigger asChild>
+                          <Button className="h-9 gap-2 shrink-0"><Plus size={15} /> Add past question</Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[480px] max-h-[85vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle className="font-serif text-xl font-semibold tracking-tight">Add past question</DialogTitle>
+                            <DialogDescription className="text-sm text-muted-foreground">
+                              Link-based only. Host the paper on Google Drive (or similar) and paste the share link — there is no server to store files.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="grid gap-5 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="grid gap-2">
+                                <Label className="text-xs font-medium text-muted-foreground">Course code</Label>
+                                <Input value={newPq.courseCode} onChange={e => setNewPq({ ...newPq, courseCode: e.target.value })} className="h-11" placeholder="e.g. PHY104" />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label className="text-xs font-medium text-muted-foreground">Academic year</Label>
+                                <Input value={newPq.year} onChange={e => setNewPq({ ...newPq, year: e.target.value })} className="h-11" placeholder="e.g. 2024/2025" />
+                              </div>
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-xs font-medium text-muted-foreground">Course title</Label>
+                              <Input value={newPq.courseTitle} onChange={e => setNewPq({ ...newPq, courseTitle: e.target.value })} className="h-11" placeholder="e.g. Practical Physics II" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="grid gap-2">
+                                <Label className="text-xs font-medium text-muted-foreground">Semester</Label>
+                                <Select value={newPq.semester} onValueChange={v => setNewPq({ ...newPq, semester: v })}>
+                                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="1st">1st semester</SelectItem>
+                                    <SelectItem value="2nd">2nd semester</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="grid gap-2">
+                                <Label className="text-xs font-medium text-muted-foreground">Exam type</Label>
+                                <Select value={newPq.examType} onValueChange={v => setNewPq({ ...newPq, examType: v })}>
+                                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="final">Final exam</SelectItem>
+                                    <SelectItem value="mid">Mid-semester</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-xs font-medium text-muted-foreground">Question paper link</Label>
+                              <Input value={newPq.url} onChange={e => setNewPq({ ...newPq, url: e.target.value })} className="h-11" placeholder="https://drive.google.com/file/d/..." />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label className="text-xs font-medium text-muted-foreground">Answer-scheme link (optional)</Label>
+                              <Input value={newPq.answerSchemeUrl} onChange={e => setNewPq({ ...newPq, answerSchemeUrl: e.target.value })} className="h-11" placeholder="https://drive.google.com/file/d/..." />
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button className="w-full h-11 gap-2" onClick={submitPq}><Plus size={16} /> Add past question</Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {sortedPqs.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                          <FileQuestion className="h-9 w-9 text-muted-foreground" strokeWidth={1.5} />
+                          <p className="text-sm text-muted-foreground">No past questions have been added yet.</p>
+                        </div>
+                      ) : (
+                        <Table>
+                          <TableHeader className="bg-muted/50">
+                            <TableRow className="border-border">
+                              <TableHead className="py-4 px-6 text-xs font-medium text-muted-foreground">Course</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Year</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Semester</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Type</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Uploader</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Answer scheme</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right px-6">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sortedPqs.map(p => {
+                              const schemeVisible = !!p.answerSchemeVisible;
+                              const hasScheme = !!(p.answerSchemeUrl || p.answerSchemeData);
+                              return (
+                                <TableRow key={p.id} className="border-border transition-colors hover:bg-muted/40">
+                                  <TableCell className="py-4 px-6">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      {p.url ? (
+                                        <a href={p.url} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-foreground" title="Open question paper">
+                                          <Link2 size={14} />
+                                        </a>
+                                      ) : <FileQuestion size={14} className="text-muted-foreground" />}
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-foreground leading-none">{p.courseCode || '—'}</p>
+                                        <p className="text-xs text-muted-foreground mt-1.5 truncate max-w-[160px]">{p.courseTitle || 'Untitled'}</p>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className="text-sm tabular-nums text-muted-foreground">{p.year || '—'}</span>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="text-xs font-medium border-border">{p.semester || '1st'}</Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className="capitalize text-xs font-medium border-border">{p.examType === 'mid' ? 'Mid' : 'Final'}</Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm text-muted-foreground truncate max-w-[140px]">{p.uploaderName || 'Unknown'}</p>
+                                  </TableCell>
+                                  <TableCell>
+                                    {hasScheme ? (
+                                      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${schemeVisible ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'}`}>
+                                        {schemeVisible ? <Eye size={11} /> : <EyeOff size={11} />}
+                                        {schemeVisible ? 'Shown' : 'Hidden'}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">None</span>
+                                    )}
+                                  </TableCell>
+                                  <TableCell className="text-right px-6">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {hasScheme && (
+                                        <Button
+                                          variant="ghost" size="sm"
+                                          className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                                          title="Toggle answer-scheme visibility"
+                                          onClick={() => toggleAnswerSchemeVisibility(p.id)}
+                                        >
+                                          {schemeVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+                                          {schemeVisible ? 'Hide scheme' : 'Show scheme'}
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="ghost" size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        title="Remove past question"
+                                        onClick={() => removePastQuestion(p)}
                                       >
                                         <Trash2 size={16} />
                                       </Button>
