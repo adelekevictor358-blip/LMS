@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 export default function StudentQuizzes() {
-  const { user, courses, quizzes, quizResults, submitQuizResult, getStudentCourses } = useStore();
+  const { user, courses, quizzes, quizResults, submitQuizResult, getStudentCourses, getCourseAssignedLecturer } = useStore();
   const [takingQuiz, setTakingQuiz] = useState(null);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
@@ -226,6 +226,7 @@ export default function StudentQuizzes() {
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {myQuizzes.map(quiz => {
             const course = courses.find(c => c.id === quiz.courseId);
+            const lecturer = getCourseAssignedLecturer(quiz.courseId);
             const attempted = hasAttempted(quiz.id);
             const myResult = getResult(quiz.id);
             const pct = myResult ? Math.round((myResult.score / quiz.questions.length) * 100) : null;
@@ -251,7 +252,12 @@ export default function StudentQuizzes() {
                 </div>
                 <h4 className="text-base font-semibold leading-snug text-foreground">{quiz.title}</h4>
                 <p className="text-sm leading-relaxed text-muted-foreground text-pretty">{quiz.description}</p>
-                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                {lecturer && (
+                  <p className="text-xs font-medium text-muted-foreground mt-1">
+                    By: {lecturer.title || 'Dr.'} {lecturer.name}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground mt-2">
                   <span className="flex items-center gap-1.5"><Clock size={14} /> {quiz.timeLimit} min</span>
                   <span className="flex items-center gap-1.5"><FileText size={14} /> {quiz.questions.length} questions</span>
                 </div>

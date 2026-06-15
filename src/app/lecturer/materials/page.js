@@ -23,7 +23,7 @@ const TYPE_ICONS = {
 
 export default function LecturerMaterials() {
   const { user, courses, materials, addMaterial, deleteMaterial } = useStore();
-  const myCourses = courses.filter(c => c.lecturerId === user?.id);
+  const myCourses = useStore(s => s.getLecturerRegisteredCourses)(user?.id);
   const myMaterials = materials.filter(m => m.uploadedBy === user?.id);
   const [showForm, setShowForm] = useState(false);
   const [filterCourse, setFilterCourse] = useState('all');

@@ -2,17 +2,21 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, BookOpen, Layers, ClipboardList, HelpCircle, Users, MessageSquare, Megaphone, LogOut, Settings, Film } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Layers, ClipboardList, ClipboardCheck, HelpCircle, Users, MessageSquare, Megaphone, LogOut, Settings, Film } from 'lucide-react';
 import { useStore } from '@/store/useStore';
 
 export default function LecturerSidebar() {
   const pathname = usePathname();
-  const { user, logout, messages, liveSessions } = useStore();
+  const { user, logout, messages, liveSessions, lecturerCourseRegWindow, lecturerCourseRegistrations, isLecturerRegEditable } = useStore();
   const unreadMessages = messages?.filter(m => m.to === user?.id && !m.read).length || 0;
   const isClassLive = liveSessions?.some(s => s.lecturerId === user?.id);
+  const regEditable = isLecturerRegEditable?.(user?.id);
+  const hasSubmitted = !!lecturerCourseRegistrations?.[user?.id]?.submittedAt;
+  const regBadge = regEditable && !hasSubmitted ? 1 : 0; // pulse badge when open & not yet submitted
 
   const links = [
     { label: 'Dashboard', path: '/lecturer', icon: <LayoutDashboard size={18} /> },
+    { label: 'Course Registration', path: '/lecturer/course-registration', icon: <ClipboardCheck size={18} />, badge: regBadge, isReg: true },
     { label: 'My Courses', path: '/lecturer/courses', icon: <BookOpen size={18} /> },
     { label: 'Materials', path: '/lecturer/materials', icon: <Layers size={18} /> },
     { label: 'Assignments', path: '/lecturer/assignments', icon: <ClipboardList size={18} /> },
@@ -65,6 +69,11 @@ export default function LecturerSidebar() {
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">
                     <span className="h-2 w-2 rounded-full bg-success animate-pulse" aria-hidden="true" />
                     Live
+                  </span>
+                ) : link.isReg && link.badge > 0 ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-2 py-0.5 text-xs font-medium text-warning">
+                    <span className="h-2 w-2 rounded-full bg-warning animate-pulse" aria-hidden="true" />
+                    Open
                   </span>
                 ) : (
                   link.badge > 0 && (

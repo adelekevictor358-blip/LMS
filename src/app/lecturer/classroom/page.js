@@ -42,7 +42,7 @@ export default function NeuralLecturerHub() {
   });
 
   const mySessions = liveSessions.filter(session => session.lecturerId === user?.id);
-  const myModules = courses.filter(c => c.lecturerId === user?.id);
+  const myModules = useStore(s => s.getLecturerRegisteredCourses)(user?.id);
 
   const handleStartClass = () => {
     if (!selectedModule) {

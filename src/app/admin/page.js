@@ -3,7 +3,7 @@
 
 import { useStore } from '@/store/useStore';
 import { semesterFromCode, nextSession, nextLevel } from '@/lib/utils';
-import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight } from 'lucide-react';
+import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight, ClipboardCheck, CalendarDays, LockOpen, Lock, RefreshCw, Eye } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -54,6 +54,16 @@ export default function AdminDashboard() {
   const excludedIds = useStore(state => state.excludedIds);
   const unreadCount = notifications?.filter(n => !n.read).length || 0;
 
+  // ── Lecturer Course Registration store selectors ──
+  const lecturerCourseRegWindow = useStore(state => state.lecturerCourseRegWindow);
+  const lecturerCourseRegistrations = useStore(state => state.lecturerCourseRegistrations);
+  const lecturerRegOverrides = useStore(state => state.lecturerRegOverrides);
+  const openLecturerCourseReg = useStore(state => state.openLecturerCourseReg);
+  const closeLecturerCourseReg = useStore(state => state.closeLecturerCourseReg);
+  const overrideLecturerReg = useStore(state => state.overrideLecturerReg);
+  const revokeOverrideLecturerReg = useStore(state => state.revokeOverrideLecturerReg);
+  const getLecturerRegisteredCourses = useStore(state => state.getLecturerRegisteredCourses);
+
   useEffect(() => {
     setMounted(true);
     const userId = user?.id;
@@ -93,6 +103,14 @@ export default function AdminDashboard() {
   const [adminCourseSemesterFilter, setAdminCourseSemesterFilter] = useState('all');
   const [adminCourseProgramFilter, setAdminCourseProgramFilter] = useState('all');
   const [appointingCourseId, setAppointingCourseId] = useState(null);
+
+  // Lecturer Course Reg admin state
+  const [lcrStartDate, setLcrStartDate] = useState('');
+  const [lcrEndDate, setLcrEndDate] = useState('');
+  const [lcrSemester, setLcrSemester] = useState(currentSemester || '1st');
+  const [lcrSession, setLcrSession] = useState(currentSession || '2025/2026');
+  const [viewRegLecturer, setViewRegLecturer] = useState(null);
+  const [lcrSearchQuery, setLcrSearchQuery] = useState('');
 
   // Unified Hydration & Auth Check
   if (!mounted || !hasHydrated) {
@@ -174,6 +192,9 @@ export default function AdminDashboard() {
               </TabsTrigger>
               <TabsTrigger value="governance" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
                 <ShieldCheck className="h-4 w-4" /> Governance
+              </TabsTrigger>
+              <TabsTrigger value="lecturer-reg" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
+                <ClipboardCheck className="h-4 w-4" /> Course Reg
               </TabsTrigger>
             </TabsList>
           </div>
@@ -917,8 +938,308 @@ export default function AdminDashboard() {
                    </Button>
                 </div>
           </TabsContent>
+          <TabsContent value="lecturer-reg" className="space-y-6">
+            {/* Window Status Card */}
+            <Card className="rounded-xl border border-border bg-card shadow-sm">
+              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+                <div>
+                  <CardTitle className="text-lg font-semibold">Lecturer Course Registration Window</CardTitle>
+                  <CardDescription className="text-sm">
+                    Set the registration period for lecturers to declare their offered courses.
+                  </CardDescription>
+                </div>
+                <Badge
+                  variant="secondary"
+                  className={`font-medium shrink-0 ${
+                    lecturerCourseRegWindow.open ? 'bg-success/10 text-success' : 'bg-muted text-muted-foreground'
+                  }`}
+                >
+                  <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${
+                    lecturerCourseRegWindow.open ? 'bg-success' : 'bg-muted-foreground'
+                  }`} />
+                  {lecturerCourseRegWindow.open ? 'Open' : 'Closed'}
+                </Badge>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {/* Configure window */}
+                <div className="grid gap-4 rounded-md border border-border bg-muted/40 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">Semester</Label>
+                    <Select value={lcrSemester} onValueChange={setLcrSemester}>
+                      <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1st">1st semester</SelectItem>
+                        <SelectItem value="2nd">2nd semester</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">Session</Label>
+                    <Input
+                      value={lcrSession}
+                      onChange={e => setLcrSession(e.target.value)}
+                      className="h-10"
+                      placeholder="e.g. 2025/2026"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">Start date</Label>
+                    <Input
+                      type="datetime-local"
+                      value={lcrStartDate}
+                      onChange={e => setLcrStartDate(e.target.value)}
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs font-medium text-muted-foreground">End date (deadline)</Label>
+                    <Input
+                      type="datetime-local"
+                      value={lcrEndDate}
+                      onChange={e => setLcrEndDate(e.target.value)}
+                      className="h-10"
+                    />
+                  </div>
+                </div>
+
+                {/* Open / Force-close buttons */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    className="gap-2"
+                    disabled={!lcrEndDate || !lcrStartDate}
+                    onClick={() => {
+                      if (!lcrStartDate || !lcrEndDate) { alert('Set both a start and end date first.'); return; }
+                      if (confirm(`Open lecturer course registration for ${lcrSemester} semester (${lcrSession})? Deadline: ${new Date(lcrEndDate).toLocaleString()}`)) {
+                        openLecturerCourseReg(
+                          new Date(lcrStartDate).toISOString(),
+                          new Date(lcrEndDate).toISOString(),
+                          lcrSemester,
+                          lcrSession
+                        );
+                      }
+                    }}
+                  >
+                    <LockOpen size={15} /> Open registration
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                    disabled={!lecturerCourseRegWindow.open}
+                    onClick={() => {
+                      if (confirm('Force-close lecturer course registration? All lecturers will immediately lose edit access.')) {
+                        closeLecturerCourseReg();
+                      }
+                    }}
+                  >
+                    <Lock size={15} /> Force-close
+                  </Button>
+                </div>
+
+                {/* Active window info */}
+                {lecturerCourseRegWindow.session && (
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-md border border-border bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5"><CalendarDays size={13} /> {lecturerCourseRegWindow.semester} semester · {lecturerCourseRegWindow.session}</span>
+                    {lecturerCourseRegWindow.startDate && <span>Start: {new Date(lecturerCourseRegWindow.startDate).toLocaleString()}</span>}
+                    {lecturerCourseRegWindow.endDate && <span>Deadline: {new Date(lecturerCourseRegWindow.endDate).toLocaleString()}</span>}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Lecturer Status Table */}
+            <Card className="rounded-xl border border-border bg-card shadow-sm">
+              <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
+                <div>
+                  <CardTitle className="text-lg font-semibold">Lecturer Status</CardTitle>
+                  <CardDescription className="text-sm">Track who has registered and who hasn't.</CardDescription>
+                </div>
+                <div className="relative w-56">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Search lecturers…"
+                    className="pl-9 h-9"
+                    value={lcrSearchQuery}
+                    onChange={e => setLcrSearchQuery(e.target.value)}
+                  />
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                {(() => {
+                  const lecturers = allUsers.filter(u => u.role === 'lecturer' &&
+                    (!lcrSearchQuery || u.name.toLowerCase().includes(lcrSearchQuery.toLowerCase()) || (u.department||'').toLowerCase().includes(lcrSearchQuery.toLowerCase()))
+                  );
+                  if (lecturers.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+                        <Users className="h-8 w-8 text-muted-foreground" strokeWidth={1.5} />
+                        <p className="text-sm text-muted-foreground">No lecturers found.</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <Table>
+                      <TableHeader className="bg-muted/50">
+                        <TableRow className="border-border">
+                          <TableHead className="py-4 text-xs font-medium text-muted-foreground">Lecturer</TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground">Status</TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground">Courses selected</TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground">Submitted at</TableHead>
+                          <TableHead className="text-xs font-medium text-muted-foreground text-right px-6">Actions</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {lecturers.map(lec => {
+                          const reg = lecturerCourseRegistrations[lec.id];
+                          const hasOverride = lecturerRegOverrides.includes(lec.id);
+                          const regCourses = reg ? courses.filter(c => (reg.courseIds || []).includes(c.id)) : [];
+                          const statusLabel = reg?.submittedAt ? 'Submitted' : reg?.courseIds?.length > 0 ? 'Draft saved' : 'Not started';
+                          const statusColor = reg?.submittedAt ? 'bg-success/10 text-success' : reg?.courseIds?.length > 0 ? 'bg-warning/10 text-warning' : 'bg-muted text-muted-foreground';
+
+                          return (
+                            <TableRow key={lec.id} className="border-border hover:bg-muted/40 transition-colors">
+                              <TableCell className="py-4">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-full bg-secondary text-secondary-foreground flex items-center justify-center text-xs font-semibold">
+                                    {lec.name.substring(0, 2).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground leading-none">{lec.name}</p>
+                                    <p className="text-xs text-muted-foreground mt-1">{lec.department || lec.college || lec.staffId}</p>
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${statusColor}`}>
+                                  {reg?.submittedAt && <CheckCircle size={11} />}
+                                  {statusLabel}
+                                </span>
+                                {hasOverride && (
+                                  <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-info/10 px-2 py-0.5 text-[10px] font-medium text-info">
+                                    <RefreshCw size={9} /> Override
+                                  </span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <span className="tabular-nums text-sm text-foreground font-medium">{regCourses.length}</span>
+                                <span className="ml-1 text-xs text-muted-foreground">course{regCourses.length !== 1 ? 's' : ''}</span>
+                              </TableCell>
+                              <TableCell>
+                                <span className="text-xs text-muted-foreground">
+                                  {reg?.submittedAt ? new Date(reg.submittedAt).toLocaleString() : '—'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right px-6">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {/* View registered courses */}
+                                  {regCourses.length > 0 && (
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                      title="View registered courses"
+                                      onClick={() => setViewRegLecturer(lec)}
+                                    >
+                                      <Eye size={15} />
+                                    </Button>
+                                  )}
+                                  {/* Re-open / revoke override */}
+                                  {hasOverride ? (
+                                    <Button
+                                      variant="ghost" size="sm"
+                                      className="h-8 gap-1.5 text-xs text-warning hover:text-warning"
+                                      onClick={() => revokeOverrideLecturerReg(lec.id)}
+                                    >
+                                      <Lock size={13} /> Revoke
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      variant="ghost" size="sm"
+                                      className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                                      title="Re-open registration for this lecturer"
+                                      onClick={() => {
+                                        if (confirm(`Re-open course registration for ${lec.name}? They will be able to edit their selection even if the window is closed.`)) {
+                                          overrideLecturerReg(lec.id);
+                                        }
+                                      }}
+                                    >
+                                      <LockOpen size={13} /> Re-open
+                                    </Button>
+                                  )}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              {(() => {
+                const lecturers = allUsers.filter(u => u.role === 'lecturer');
+                const submitted = lecturers.filter(l => !!lecturerCourseRegistrations[l.id]?.submittedAt).length;
+                const drafted = lecturers.filter(l => !lecturerCourseRegistrations[l.id]?.submittedAt && (lecturerCourseRegistrations[l.id]?.courseIds?.length > 0)).length;
+                const notStarted = lecturers.length - submitted - drafted;
+                return [
+                  { label: 'Total faculty', value: lecturers.length, color: 'text-foreground' },
+                  { label: 'Submitted', value: submitted, color: 'text-success' },
+                  { label: 'Draft saved', value: drafted, color: 'text-warning' },
+                  { label: 'Not started', value: notStarted, color: 'text-muted-foreground' },
+                ].map((s, i) => (
+                  <Card key={i} className="rounded-xl border border-border bg-card shadow-sm">
+                    <CardContent className="p-4 text-center">
+                      <p className={`text-2xl font-semibold tabular-nums ${s.color}`}>{s.value}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{s.label}</p>
+                    </CardContent>
+                  </Card>
+                ));
+              })()}
+            </div>
+          </TabsContent>
         </Tabs>
       </main>
+
+      {/* View lecturer registered courses dialog */}
+      <Dialog open={!!viewRegLecturer} onOpenChange={open => !open && setViewRegLecturer(null)}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif text-xl font-semibold tracking-tight">
+              {viewRegLecturer?.name} — Registered Courses
+            </DialogTitle>
+            <DialogDescription>
+              {viewRegLecturer && lecturerCourseRegistrations[viewRegLecturer.id]?.submittedAt
+                ? `Submitted ${new Date(lecturerCourseRegistrations[viewRegLecturer.id].submittedAt).toLocaleString()}`
+                : 'Draft — not yet submitted.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            {viewRegLecturer && (() => {
+              const reg = lecturerCourseRegistrations[viewRegLecturer.id];
+              const regCourses = reg ? courses.filter(c => (reg.courseIds || []).includes(c.id)) : [];
+              return regCourses.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">No courses selected.</p>
+              ) : regCourses.map((c, i) => (
+                <div key={c.id} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
+                  <span className="w-5 text-right text-xs tabular-nums text-muted-foreground">{i + 1}.</span>
+                  <div className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-[10px] font-bold text-white" style={{ backgroundColor: c.color || '#3b82f6' }}>
+                    {c.code?.split(' ')[0]?.substring(0,3)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{c.title}</p>
+                    <p className="text-xs text-muted-foreground">{c.code} · {c.units} units · {c.level}</p>
+                  </div>
+                </div>
+              ));
+            })()}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewRegLecturer(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

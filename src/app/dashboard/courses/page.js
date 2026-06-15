@@ -13,7 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 export default function StudentCourses() {
-  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, registrationEligibility, currentSession, currentSemester, semesterOpen } = useStore();
+  const { user, courses, getAllUsers, lecturerRatings, enrollInCourse, unenrollFromCourse, getStudentCourses, getStudentCourseIds, registrationEligibility, currentSession, currentSemester, semesterOpen, getCourseAssignedLecturer } = useStore();
   const [view, setView] = useState('portfolio');
   const [semesterFilter, setSemesterFilter] = useState(currentSemester || '1st');
   const [levelFilter, setLevelFilter] = useState(user?.level || '100L');
@@ -42,7 +42,6 @@ export default function StudentCourses() {
   const enrolledIds = getStudentCourseIds(user);
   const availableCourses = levelCourses.filter(c => !enrolledIds.includes(c.id));
 
-  const getLecturer = (lecturerId) => allUsers.find(u => u.id === lecturerId && u.role === 'lecturer');
   const getLecturerStats = (lecturerId) => {
     const ratings = lecturerRatings.filter(r => r.lecturerId === lecturerId);
     return ratings.length === 0 ? { avg: "0.0", count: 0 } : { avg: (ratings.reduce((a, r) => a + r.rating, 0) / ratings.length).toFixed(1), count: ratings.length };
@@ -143,7 +142,7 @@ export default function StudentCourses() {
       ) : (
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
         {visibleCourses.map(course => {
-          const lecturer = getLecturer(course.lecturerId);
+          const lecturer = getCourseAssignedLecturer(course.id);
           const isRegistered = enrolledIds.includes(course.id);
           const elig = registrationEligibility(course, user);
           const registrable = elig.ok;
@@ -166,11 +165,11 @@ export default function StudentCourses() {
                   <div className="flex items-center gap-3">
                     <Avatar className="h-10 w-10 border border-border">
                       <AvatarFallback className="bg-muted text-muted-foreground text-xs font-medium">
-                        {lecturer?.name ? lecturer.name.split(' ').map(n=>n[0]).join('') : 'MT'}
+                        {lecturer?.name ? lecturer.name.split(' ').map(n=>n[0]).join('') : 'NA'}
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex flex-col min-w-0">
-                       <span className="text-sm font-medium text-foreground truncate">{lecturer?.title || 'Dr.'} {lecturer?.name || 'Assigned Staff'}</span>
+                       <span className="text-sm font-medium text-foreground truncate">{lecturer ? `${lecturer?.title || 'Dr.'} ${lecturer.name}` : 'Lecturer not yet assigned'}</span>
                        <span className="text-xs text-muted-foreground">Lead instructor</span>
                     </div>
                   </div>
@@ -228,6 +227,10 @@ export default function StudentCourses() {
                 </DialogTitle>
                 <DialogDescription className="text-sm leading-relaxed text-muted-foreground">
                   {selectedCourse.semester} semester · {selectedCourse.level}
+                  <br />
+                  <span className="font-medium text-foreground mt-1 block">
+                    {getCourseAssignedLecturer(selectedCourse.id) ? `Lecturer: ${getCourseAssignedLecturer(selectedCourse.id)?.title || 'Dr.'} ${getCourseAssignedLecturer(selectedCourse.id)?.name}` : 'Lecturer not yet assigned'}
+                  </span>
                 </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

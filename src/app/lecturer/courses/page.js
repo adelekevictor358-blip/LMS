@@ -16,7 +16,7 @@ import { Separator } from "@/components/ui/separator";
 
 export default function LecturerCourses() {
   const { user, courses, assignments, submissions, addCourse, addAssignment, getModuleEnrolmentCount } = useStore();
-  const myCourses = courses.filter(c => c.lecturerId === user?.id);
+  const myCourses = useStore(s => s.getLecturerRegisteredCourses)(user?.id);
   const [selected, setSelected] = useState(null);
 
   // New Course States

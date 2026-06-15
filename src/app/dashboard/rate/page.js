@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 
 export default function RateLecturer() {
-  const { user, courses, lecturerRatings, submitRating, getAllUsers } = useStore();
+  const { user, courses, getAllUsers, lecturerRatings, submitRating, getStudentCourseIds, getLecturerRegisteredCourses } = useStore();
   const allUsers = getAllUsers();
   const lecturers = allUsers.filter(u => u.role === 'lecturer');
   const [selected, setSelected] = useState(null);
@@ -17,7 +17,7 @@ export default function RateLecturer() {
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
 
-  const getLecturerCourses = (lecturerId) => courses.filter(c => c.lecturerId === lecturerId);
+  const getLecturerCourses = (lecturerId) => getLecturerRegisteredCourses(lecturerId);
   const getAvgRating = (lecturerId) => {
     const ratings = lecturerRatings.filter(r => r.lecturerId === lecturerId);
     if (ratings.length === 0) return null;

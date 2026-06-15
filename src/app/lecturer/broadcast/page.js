@@ -13,7 +13,7 @@ import { Separator } from "@/components/ui/separator";
 
 export default function LecturerBroadcast() {
   const { user, courses, broadcasts, sendLecturerBroadcast } = useStore();
-  const myCourses = courses.filter(c => c.lecturerId === user?.id);
+  const myCourses = useStore(s => s.getLecturerRegisteredCourses)(user?.id);
   const myBroadcasts = broadcasts.filter(b => b.from === user?.id);
   const [form, setForm] = useState({ title: '', message: '', courseId: 'all', isUrgent: false });
   const [sent, setSent] = useState(false);

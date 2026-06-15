@@ -15,7 +15,7 @@ export default function LecturerDashboard() {
   const router = useRouter();
   const { user, courses, assignments, submissions, startLiveSession, logout, getLecturerTotalStudents, scheduledSessions } = useStore();
 
-  const myCourses = courses.filter(c => c.lecturerId === user?.id);
+  const myCourses = useStore(s => s.getLecturerRegisteredCourses)(user?.id);
   const myCourseIds = myCourses.map(c => c.id);
   const myAssignments = assignments.filter(a => myCourseIds.includes(a.courseId));
   const pendingGradiing = submissions.filter(s => myAssignments.some(a => a.id === s.assignmentId) && s.score === null);

@@ -2,7 +2,7 @@
 
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
-import { ClipboardList, Plus, CheckCircle2, Clock, Eye, Star, MessageSquare } from 'lucide-react';
+import { ClipboardList, Plus, CheckCircle2, Clock, Eye, Star, MessageSquare, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -17,20 +17,20 @@ import {
 } from '@/components/ui/dialog';
 
 export default function LecturerAssignments() {
-  const { user, courses, assignments, submissions, addAssignment, gradeSubmission } = useStore();
-  const myCourses = courses.filter(c => c.lecturerId === user?.id);
+  const { user, courses, assignments, submissions, addAssignment, gradeSubmission, getLecturerRegisteredCourses } = useStore();
+  const myCourses = getLecturerRegisteredCourses(user?.id);
   const myAssignments = assignments.filter(a => a.createdBy === user?.id);
   const [showForm, setShowForm] = useState(false);
   const [activeTab, setActiveTab] = useState('assignments');
   const [viewingSubmissions, setViewingSubmissions] = useState(null);
   const [gradingSubmission, setGradingSubmission] = useState(null);
   const [gradeForm, setGradeForm] = useState({ score: '', feedback: '' });
-  const [form, setForm] = useState({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100 });
+  const [form, setForm] = useState({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100, attachment: null });
 
   const handleCreate = (e) => {
     e.preventDefault();
     addAssignment({ ...form, courseId: parseInt(form.courseId), maxScore: parseInt(form.maxScore), createdBy: user.id });
-    setForm({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100 });
+    setForm({ courseId: '', title: '', description: '', dueDate: '', maxScore: 100, attachment: null });
     setShowForm(false);
   };
 
@@ -168,7 +168,25 @@ export default function LecturerAssignments() {
                 required
               />
             </div>
-            <DialogFooter className="gap-2 sm:gap-2">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="attachment">Resource attachment (optional)</Label>
+              <Input
+                id="attachment"
+                type="file"
+                className="cursor-pointer file:text-foreground file:font-medium"
+                onChange={e => {
+                  const file = e.target.files[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      setForm({ ...form, attachment: { name: file.name, type: file.type, data: reader.result } });
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+            </div>
+            <DialogFooter className="gap-2 sm:gap-2 mt-2">
               <Button type="button" variant="outline" onClick={() => setShowForm(false)}>Cancel</Button>
               <Button type="submit" className="active:translate-y-px">Create assignment</Button>
             </DialogFooter>
@@ -191,7 +209,19 @@ export default function LecturerAssignments() {
                 <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Student&apos;s answer
                 </p>
-                <p className="text-sm leading-relaxed text-foreground text-pretty">{gradingSubmission.content}</p>
+                {gradingSubmission.content ? (
+                  <p className="text-sm leading-relaxed text-foreground text-pretty mb-3">{gradingSubmission.content}</p>
+                ) : (
+                  <p className="text-sm italic text-muted-foreground mb-3">No text provided.</p>
+                )}
+                {gradingSubmission.attachment && (
+                  <Button variant="secondary" size="sm" asChild>
+                    <a href={gradingSubmission.attachment.data} download={gradingSubmission.attachment.name} className="flex items-center">
+                      <Download size={14} className="mr-1.5" />
+                      Download attachment: {gradingSubmission.attachment.name}
+                    </a>
+                  </Button>
+                )}
               </div>
               <form onSubmit={handleGrade} className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1.5">
@@ -286,6 +316,16 @@ export default function LecturerAssignments() {
                           {ungraded} ungraded
                         </span>
                       </div>
+                      {asgn.attachment && (
+                        <div className="mt-3">
+                          <Button variant="secondary" size="sm" asChild>
+                            <a href={asgn.attachment.data} download={asgn.attachment.name} className="flex items-center">
+                              <Download size={14} className="mr-1.5" />
+                              {asgn.attachment.name}
+                            </a>
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <Button
@@ -327,12 +367,17 @@ export default function LecturerAssignments() {
                       {course && <Badge variant="secondary" className="font-medium">{course.code}</Badge>}
                     </div>
                     <p className="text-sm font-medium text-foreground">{asgn?.title}</p>
-                    <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
-                      {sub.content.slice(0, 100)}…
+                    <p className="text-sm leading-relaxed text-muted-foreground text-pretty mb-2">
+                      {sub.content ? sub.content.slice(0, 100) + '…' : <span className="italic">No text content</span>}
                     </p>
-                    <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {sub.attachment && (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-foreground bg-muted px-2 py-1 rounded-md w-fit mb-2">
+                        <Download size={12} /> Attachment included
+                      </span>
+                    )}
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Clock size={12} /> Submitted {new Date(sub.submittedAt).toLocaleString()}
-                    </span>
+                    </div>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-2">
                     {sub.score !== null ? (

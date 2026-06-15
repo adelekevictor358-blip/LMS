@@ -76,6 +76,21 @@ export const useStore = create(
         toggleLecturerPortal: () =>
           set((state) => ({ lecturerPortalActive: !state.lecturerPortalActive })),
 
+        // ─── LECTURER COURSE REGISTRATION ───
+        // Window set by admin; registrations keyed by lecturerId;
+        // overrides allow individual re-opens after deadline.
+        lecturerCourseRegWindow: {
+          open: false,           // is the window currently open?
+          startDate: null,       // ISO string
+          endDate: null,         // ISO string (deadline)
+          semester: null,        // '1st' | '2nd'
+          session: null,         // e.g. '2025/2026'
+        },
+        // { [lecturerId]: { courseIds: number[], submittedAt: ISO|null } }
+        lecturerCourseRegistrations: {},
+        // Set of lecturerId strings that have been individually re-opened by admin
+        lecturerRegOverrides: [],
+
         login: async (email, password) => {
           const allUsers = get().getAllUsers();
           const foundUser = allUsers.find(u => u.email === email && u.password === password);
@@ -452,7 +467,7 @@ export const useStore = create(
           const targetCourse = get().courses.find(c => c.id === courseId);
           if (!targetCourse) return null;
           
-          const lecturer = get().getAllUsers().find(u => u.id === targetCourse.lecturerId);
+          const lecturer = get().getCourseAssignedLecturer(courseId);
           const sessionId = targetCourse.code + '-' + Date.now();
           
           const newSession = {
@@ -460,7 +475,7 @@ export const useStore = create(
             courseId: courseId,
             title: targetCourse.title,
             lecturerName: lecturer?.name || 'Academic Lead',
-            lecturerId: targetCourse.lecturerId,
+            lecturerId: lecturer?.id,
             startTime: new Date().toISOString(),
             settings: {
               muteOnEntry: settings.muteOnEntry ?? true,
@@ -491,9 +506,9 @@ export const useStore = create(
           return sessionId;
         },
         startPrivateCall: (courseId, studentId, studentName) => {
-          const { courses, getAllUsers } = get();
+          const { courses, getCourseAssignedLecturer } = get();
           const targetCourse = courses.find(c => c.id === courseId);
-          const lecturer = getAllUsers().find(u => u.id === targetCourse.lecturerId);
+          const lecturer = getCourseAssignedLecturer(courseId);
           const sessionId = `PRIVATE-${studentId}-${Date.now()}`;
           
           const newSession = {
@@ -501,7 +516,7 @@ export const useStore = create(
             courseId,
             title: `Private Consultation: ${studentName}`,
             lecturerName: lecturer?.name,
-            lecturerId: targetCourse.lecturerId,
+            lecturerId: lecturer?.id,
             startTime: new Date().toISOString(),
             isPrivate: true,
             targetStudentId: studentId,
@@ -610,7 +625,7 @@ export const useStore = create(
         addAssignment: (assignment) => set((state) => ({
           assignments: [...state.assignments, { ...assignment, id: Date.now(), status: 'active' }]
         })),
-        submitAssignment: (assignmentId, content) => {
+        submitAssignment: (assignmentId, content, attachment = null) => {
           const { user } = get();
           set((state) => ({
             submissions: [...state.submissions, {
@@ -619,6 +634,7 @@ export const useStore = create(
               studentId: user.id,
               studentName: user.name,
               content,
+              attachment,
               submittedAt: new Date().toISOString(),
               score: null,
               feedback: ''
@@ -1022,7 +1038,7 @@ export const useStore = create(
 
         // ─── ANALYTICS HELPERS ───
         getLecturerModules: (lecturerId) => {
-          return get().courses.filter(c => c.lecturerId === lecturerId);
+          return get().getLecturerRegisteredCourses(lecturerId);
         },
         getModuleEnrolmentCount: (courseId) => {
           const state = get();
@@ -1034,14 +1050,126 @@ export const useStore = create(
           return state.getAllUsers().filter(u => u.role === 'student' && state.getStudentCourseIds(u).some(id => myCourseIds.includes(id))).length;
         },
         getRecentSubmissions: (lecturerId, limit = 5) => {
-          const { assignments, submissions, courses } = get();
-          const myCourseIds = courses.filter(c => c.lecturerId === lecturerId).map(c => c.id);
+          const { assignments, submissions } = get();
+          const myCourseIds = get().getLecturerRegisteredCourses(lecturerId).map(c => c.id);
           const myAssignmentIds = assignments.filter(a => myCourseIds.includes(a.courseId)).map(a => a.id);
           
           return submissions
             .filter(s => myAssignmentIds.includes(s.assignmentId))
             .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
             .slice(0, limit);
+        },
+
+        // ─── LECTURER COURSE REG ACTIONS ───
+        setLecturerCourseRegWindow: (config) => set((state) => ({
+          lecturerCourseRegWindow: { ...state.lecturerCourseRegWindow, ...config },
+          lecturerRegOverrides: [], // clear individual overrides when window changes
+        })),
+        openLecturerCourseReg: (startDate, endDate, semester, session) => {
+          set((state) => ({
+            lecturerCourseRegWindow: { open: true, startDate, endDate, semester, session },
+            lecturerRegOverrides: [],
+            notifications: [
+              { id: Date.now(), text: `Lecturer course registration for ${semester} semester (${session}) is now open. Deadline: ${new Date(endDate).toLocaleDateString()}.`, time: 'Just now', read: false, isUrgent: true, target: 'lecturer' },
+              ...state.notifications,
+            ],
+          }));
+        },
+        closeLecturerCourseReg: () => {
+          set((state) => ({
+            lecturerCourseRegWindow: { ...state.lecturerCourseRegWindow, open: false },
+            lecturerRegOverrides: [],
+            notifications: [
+              { id: Date.now(), text: 'Lecturer course registration has been closed by the admin.', time: 'Just now', read: false, isUrgent: true, target: 'lecturer' },
+              ...state.notifications,
+            ],
+          }));
+        },
+        overrideLecturerReg: (lecturerId) => {
+          set((state) => ({
+            lecturerRegOverrides: state.lecturerRegOverrides.includes(lecturerId)
+              ? state.lecturerRegOverrides
+              : [...state.lecturerRegOverrides, lecturerId],
+          }));
+        },
+        revokeOverrideLecturerReg: (lecturerId) => {
+          set((state) => ({
+            lecturerRegOverrides: state.lecturerRegOverrides.filter(id => id !== lecturerId),
+          }));
+        },
+        // Returns whether registration is currently editable for a given lecturer
+        isLecturerRegEditable: (lecturerId) => {
+          const state = get();
+          const win = state.lecturerCourseRegWindow;
+          if (state.lecturerRegOverrides.includes(lecturerId)) return true;
+          if (!win.open) return false;
+          const now = Date.now();
+          if (win.startDate && now < new Date(win.startDate).getTime()) return false;
+          if (win.endDate && now > new Date(win.endDate).getTime()) return false;
+          return true;
+        },
+        saveLecturerCourseSelection: (lecturerId, courseIds) => {
+          set((state) => ({
+            lecturerCourseRegistrations: {
+              ...state.lecturerCourseRegistrations,
+              [lecturerId]: { courseIds, submittedAt: null },
+            },
+          }));
+        },
+        submitLecturerCourseRegistration: (lecturerId, courseIds) => {
+          set((state) => {
+            const allUsers = [...MOCK_DB.users, ...state.dynamicUsers.filter(u => !state.excludedIds.includes(u.id))];
+            const lecturer = allUsers.find(u => u.id === lecturerId);
+            
+            const oldReg = state.lecturerCourseRegistrations[lecturerId]?.courseIds || [];
+            const removedIds = oldReg.filter(id => !courseIds.includes(id));
+            
+            const updatedCourses = state.courses.map(c => {
+              if (courseIds.includes(c.id)) {
+                return { ...c, lecturerId, lecturerName: lecturer?.name };
+              } else if (removedIds.includes(c.id) && c.lecturerId === lecturerId) {
+                return { ...c, lecturerId: null, lecturerName: null };
+              }
+              return c;
+            });
+
+            return {
+              courses: updatedCourses,
+              lecturerCourseRegistrations: {
+                ...state.lecturerCourseRegistrations,
+                [lecturerId]: { courseIds, submittedAt: new Date().toISOString() },
+              },
+              lecturerRegOverrides: state.lecturerRegOverrides.filter(id => id !== lecturerId),
+            };
+          });
+        },
+        getLecturerRegisteredCourses: (lecturerId) => {
+          const state = get();
+          const reg = state.lecturerCourseRegistrations[lecturerId];
+          // If no active registration object exists for this lecturer, fallback to checking static course properties
+          if (!reg) return state.courses.filter(c => c.lecturerId === lecturerId);
+          return state.courses.filter(c => reg.courseIds.some(id => String(id) === String(c.id)));
+        },
+
+        // Returns the lecturer user object for a given courseId.
+        // Reads from lecturerCourseRegistrations (persisted) rather than
+        // course.lecturerId, which is wiped on reload by the seed-course merge.
+        getCourseAssignedLecturer: (courseId) => {
+          const state = get();
+          const regs = state.lecturerCourseRegistrations;
+          const allUsers = state.getAllUsers();
+          // Find the first submitted registration that includes this courseId
+          const lecturerId = Object.keys(regs).find(lid => {
+            const reg = regs[lid];
+            return reg.submittedAt && reg.courseIds.some(id => String(id) === String(courseId));
+          });
+          if (!lecturerId) {
+            // Fall back to the static lecturerId baked into the course (legacy seed data)
+            const course = state.courses.find(c => String(c.id) === String(courseId));
+            if (!course?.lecturerId) return null;
+            return allUsers.find(u => u.id === course.lecturerId) || null;
+          }
+          return allUsers.find(u => u.id === lecturerId) || null;
         },
 
         // ─── COURSE ACTIONS ───
@@ -1155,6 +1283,9 @@ export const useStore = create(
         sessionMessages: state.sessionMessages,
         callHistory: state.callHistory,
         materials: state.materials,
+        lecturerCourseRegWindow: state.lecturerCourseRegWindow,
+        lecturerCourseRegistrations: state.lecturerCourseRegistrations,
+        lecturerRegOverrides: state.lecturerRegOverrides,
       }),
       merge: (persisted, current) => {
         const p = persisted || {};

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 
 export default function LecturerQuizzes() {
   const { user, courses, quizzes, quizResults, addQuiz } = useStore();
-  const myCourses = courses.filter(c => c.lecturerId === user?.id);
+  const myCourses = useStore(s => s.getLecturerRegisteredCourses)(user?.id);
   const myQuizzes = quizzes.filter(q => q.createdBy === user?.id);
   const [showForm, setShowForm] = useState(false);
   const [viewingResults, setViewingResults] = useState(null);

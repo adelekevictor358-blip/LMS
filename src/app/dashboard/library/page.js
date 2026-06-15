@@ -20,7 +20,7 @@ const TYPE_ICONS = {
 };
 
 export default function StudentLibrary() {
-  const { user, courses, materials, library, getStudentCourses } = useStore();
+  const { user, courses, materials, library, getStudentCourses, getCourseAssignedLecturer } = useStore();
   const [activeTab, setActiveTab] = useState('materials');
   const [filterCourse, setFilterCourse] = useState('all');
 
@@ -85,6 +85,7 @@ export default function StudentLibrary() {
             ) : (
               filteredMaterials.map(mat => {
                 const course = courses.find(c => c.id === mat.courseId);
+                const lecturer = getCourseAssignedLecturer(mat.courseId);
                 return (
                   <Card key={mat.id} className="flex flex-col overflow-hidden transition-colors hover:border-primary/40">
                     <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
@@ -102,6 +103,9 @@ export default function StudentLibrary() {
                           <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: course?.color }} aria-hidden="true" />
                           <span className="text-xs font-medium text-muted-foreground">{course?.code} — {course?.title}</span>
                         </div>
+                        {lecturer && (
+                          <span className="text-xs font-medium text-muted-foreground block mt-1">Uploaded by: {lecturer.title || 'Dr.'} {lecturer.name}</span>
+                        )}
                       </div>
                       {mat.description && (
                         <p className="text-sm leading-relaxed text-muted-foreground line-clamp-2 text-pretty">
