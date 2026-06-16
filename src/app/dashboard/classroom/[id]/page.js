@@ -81,12 +81,16 @@ export default function CinematicNeuralClassroom() {
   // rather than a "not found" screen for an in-call participant.
   const sessionRef = useRef(null);
   if (session) sessionRef.current = session;
-  const activeSession = session || sessionRef.current;
+  const localSession = session || sessionRef.current;
+  // Invite-link / guest join (cross-device): render the real Jitsi room by id even
+  // when this browser's per-machine store lacks the session.
+  const isGuestJoin = !localSession && !!id;
+  const activeSession = localSession || (isGuestJoin ? { id, title: 'Live class', participants: [], isGuest: true } : null);
 
   const currentSessionMessages = sessionMessages.filter(m => m.sessionId === id);
   const participantsList = activeSession?.participants || [];
 
-  const status = activeSession ? getSessionStatus(activeSession) : 'ended';
+  const status = localSession ? getSessionStatus(localSession) : (isGuestJoin ? 'live' : 'ended');
   const isEnded = !activeSession || status === 'ended' || endedInCall;
 
   // ─── Live clock ───

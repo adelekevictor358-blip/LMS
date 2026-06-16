@@ -62,7 +62,12 @@ export default function VirtualClassroom() {
   // screen (not "not found") once a lecturer ends and removes it.
   const sessionRef = useRef(null);
   if (session) sessionRef.current = session;
-  const currentSession = session || sessionRef.current;
+  const localSession = session || sessionRef.current;
+  // Invite-link / guest join: if THIS browser's local store doesn't have the
+  // session (data is per-machine) but we have a room id, still let the user into
+  // the real Jitsi room so live classes work across different systems/devices.
+  const isGuestJoin = !localSession && !!id;
+  const currentSession = localSession || (isGuestJoin ? { id, title: 'Live class', participants: [], isGuest: true } : null);
 
   const [showChat, setShowChat] = useState(true);
   const [message, setMessage] = useState('');
@@ -77,7 +82,7 @@ export default function VirtualClassroom() {
 
   const currentSessionMessages = sessionMessages.filter(m => m.sessionId === id);
 
-  const status = currentSession ? getSessionStatus(currentSession) : 'ended';
+  const status = localSession ? getSessionStatus(localSession) : (isGuestJoin ? 'live' : 'ended');
   const isEnded = (!currentSession && user?.role !== 'admin') || status === 'ended' || endedInCall;
   const canEmbed = !!currentSession && status === 'live' && !endedInCall;
 
