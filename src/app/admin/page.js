@@ -3,7 +3,7 @@
 
 import { useStore } from '@/store/useStore';
 import { semesterFromCode, nextSession, nextLevel } from '@/lib/utils';
-import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight, ClipboardCheck, CalendarDays, LockOpen, Lock, RefreshCw, Eye, FileQuestion, EyeOff, Percent, Target, Library, HardDrive, Link2 } from 'lucide-react';
+import { Users, BookOpen, Bell, Shield, Search, Plus, BarChart2, UserPlus, Trash2, ShieldCheck, Clock, Send, Globe, Database, Settings, RotateCcw, LogOut, Sun, Moon, Construction, CheckCircle, ChevronRight, ClipboardCheck, CalendarDays, LockOpen, Lock, RefreshCw, Eye, FileQuestion, EyeOff, Percent, Target, Library, HardDrive, Link2, FileText, CalendarClock } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
@@ -81,6 +81,12 @@ export default function AdminDashboard() {
   const addPastQuestion = useStore(state => state.addPastQuestion);
   const getTotalStorageUsage = useStore(state => state.getTotalStorageUsage);
   const getLecturerStorageUsage = useStore(state => state.getLecturerStorageUsage);
+
+  // ── Assignments oversight store selectors ──
+  const assignments = useStore(state => state.assignments);
+  const submissions = useStore(state => state.submissions);
+  const deleteAssignment = useStore(state => state.deleteAssignment);
+  const updateAssignment = useStore(state => state.updateAssignment);
 
   useEffect(() => {
     setMounted(true);
@@ -224,6 +230,9 @@ export default function AdminDashboard() {
               </TabsTrigger>
               <TabsTrigger value="resources" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
                 <Library className="h-4 w-4" /> Resources
+              </TabsTrigger>
+              <TabsTrigger value="assignments" className="rounded-md px-3.5 py-2 gap-2 text-sm font-medium data-[state=active]:bg-card data-[state=active]:shadow-sm">
+                <FileText className="h-4 w-4" /> Assignments
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1710,6 +1719,188 @@ export default function AdminDashboard() {
                                         className="h-8 w-8 text-muted-foreground hover:text-destructive"
                                         title="Remove past question"
                                         onClick={() => removePastQuestion(p)}
+                                      >
+                                        <Trash2 size={16} />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      )}
+                    </CardContent>
+                  </Card>
+                </>
+              );
+            })()}
+          </TabsContent>
+
+          <TabsContent value="assignments" className="space-y-6">
+            {(() => {
+              const submissionsFor = (asgnId) => submissions.filter(s => s.assignmentId === asgnId);
+
+              // Analytics: total assignments + average submission rate.
+              // Submission rate per assignment = submissions / enrolled students in its course.
+              const totalAssignments = assignments.length;
+              const activeCount = assignments.filter(a => a.status === 'active').length;
+              const closedCount = assignments.filter(a => a.status === 'closed').length;
+              const draftCount = assignments.filter(a => a.status === 'draft').length;
+              const totalSubmissions = submissions.length;
+
+              const enrolledCountFor = (courseId) =>
+                students.filter(s => s.enrolledCourseIds?.includes(courseId)).length;
+
+              const rates = assignments.map(a => {
+                const enrolled = enrolledCountFor(a.courseId);
+                if (enrolled <= 0) return null;
+                return Math.min(1, submissionsFor(a.id).length / enrolled);
+              }).filter(r => r !== null);
+              const avgSubmissionRatePct = rates.length
+                ? Math.round((rates.reduce((sum, r) => sum + r, 0) / rates.length) * 100)
+                : 0;
+
+              const analyticsCards = [
+                { label: 'Total assignments', value: totalAssignments, detail: 'Across all courses', icon: FileText },
+                { label: 'Active', value: activeCount, detail: 'Open to students', icon: CheckCircle },
+                { label: 'Total submissions', value: totalSubmissions, detail: 'Across all assignments', icon: ClipboardCheck },
+                { label: 'Avg submission rate', value: `${avgSubmissionRatePct}%`, detail: 'Submissions vs enrolment', icon: Percent },
+              ];
+
+              const removeAssignment = (a) => {
+                if (!confirm(`Permanently remove "${a.title}"? This deletes the assignment and every submission. This cannot be undone.`)) return;
+                deleteAssignment(a.id);
+                if (useStore.getState().assignments.some(x => x.id === a.id)) {
+                  alert(`Could not remove "${a.title}". It is owned by another account and only its owner can delete it.`);
+                }
+              };
+
+              const deactivateAssignment = (a) => {
+                if (!confirm(`Deactivate "${a.title}"? It closes immediately and students can no longer submit.`)) return;
+                const result = updateAssignment(a.id, { status: 'closed' });
+                if (!result || result.status !== 'closed') {
+                  alert(`Could not deactivate "${a.title}". It is owned by another account and only its owner can change its status.`);
+                }
+              };
+
+              const statusStyle = (status) =>
+                status === 'active' ? 'bg-success/10 text-success'
+                : status === 'closed' ? 'bg-destructive/10 text-destructive'
+                : 'bg-muted text-muted-foreground';
+
+              const fmtDate = (iso) => {
+                if (!iso) return '—';
+                const d = new Date(iso);
+                return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString();
+              };
+
+              return (
+                <>
+                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                    {analyticsCards.map((stat, i) => (
+                      <Card key={i} className="rounded-xl border border-border bg-card shadow-sm">
+                        <CardContent className="p-5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-muted-foreground">{stat.label}</p>
+                              <h3 className="mt-2 text-2xl font-semibold tabular-nums text-foreground">{stat.value}</h3>
+                              <p className="mt-1 text-xs text-muted-foreground">{stat.detail}</p>
+                            </div>
+                            <div className="h-10 w-10 shrink-0 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                              <stat.icon className="h-5 w-5" strokeWidth={1.5} />
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+
+                  <Card className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+                    <CardHeader className="border-b border-border">
+                      <CardTitle className="text-lg font-semibold">All assignments</CardTitle>
+                      <CardDescription className="text-sm">
+                        Every assignment across courses and lecturers. Deactivate it (closes submissions) or remove it entirely.
+                        {(draftCount > 0 || closedCount > 0) && (
+                          <span className="ml-1 tabular-nums">{draftCount} draft · {closedCount} closed.</span>
+                        )}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      {assignments.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                          <FileText className="h-9 w-9 text-muted-foreground" strokeWidth={1.5} />
+                          <p className="text-sm text-muted-foreground">No assignments have been created yet.</p>
+                        </div>
+                      ) : (
+                        <Table>
+                          <TableHeader className="bg-muted/50">
+                            <TableRow className="border-border">
+                              <TableHead className="py-4 px-6 text-xs font-medium text-muted-foreground">Course</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Assignment</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Lecturer</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Status</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground">Due date</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-center">Submissions</TableHead>
+                              <TableHead className="text-xs font-medium text-muted-foreground text-right px-6">Actions</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {assignments.slice().reverse().map(a => {
+                              const course = courses.find(c => c.id === a.courseId);
+                              const lecturer = allUsers.find(u => u.id === a.lecturerId || u.id === a.createdBy);
+                              const lecturerName = lecturer?.name || course?.lecturerName || 'Unassigned';
+                              const status = a.status || 'draft';
+                              const submissionCount = submissionsFor(a.id).length;
+                              return (
+                                <TableRow key={a.id} className="border-border transition-colors hover:bg-muted/40">
+                                  <TableCell className="py-4 px-6">
+                                    <div className="flex items-center gap-3">
+                                      <div className="h-9 w-9 rounded-md flex items-center justify-center text-white text-[10px] font-semibold" style={{ backgroundColor: course?.color || '#3b82f6' }}>
+                                        {(course?.code || 'AS').split(' ')[0].substring(0, 3)}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-foreground leading-none">{course?.code || '—'}</p>
+                                        <p className="text-xs text-muted-foreground mt-1.5 truncate max-w-[160px]">{course?.title || 'Unknown course'}</p>
+                                      </div>
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm font-medium text-foreground truncate max-w-[220px]">{a.title}</p>
+                                  </TableCell>
+                                  <TableCell>
+                                    <p className="text-sm text-muted-foreground truncate max-w-[160px]">{lecturerName}</p>
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline" className={`capitalize border-transparent ${statusStyle(status)}`}>
+                                      {status}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground whitespace-nowrap">
+                                      <CalendarClock size={13} /> {fmtDate(a.dueDate)}
+                                    </span>
+                                  </TableCell>
+                                  <TableCell className="text-center">
+                                    <span className="text-sm tabular-nums text-foreground">{submissionCount}</span>
+                                  </TableCell>
+                                  <TableCell className="text-right px-6">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      {status !== 'closed' && (
+                                        <Button
+                                          variant="ghost" size="sm"
+                                          className="h-8 gap-1.5 text-xs text-muted-foreground hover:text-warning"
+                                          title="Deactivate (close submissions)"
+                                          onClick={() => deactivateAssignment(a)}
+                                        >
+                                          <EyeOff size={14} /> Deactivate
+                                        </Button>
+                                      )}
+                                      <Button
+                                        variant="ghost" size="icon"
+                                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                        title="Remove assignment"
+                                        onClick={() => removeAssignment(a)}
                                       >
                                         <Trash2 size={16} />
                                       </Button>

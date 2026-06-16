@@ -1,69 +1,168 @@
-import nodemailer from 'nodemailer';
+import { sendMail, loginAlertEmailHtml } from '@/lib/email';
 
+/**
+ * POST /api/login-alert
+ * Body: { email, name, role }
+ *
+ * Captures the client IP from request headers, geolocates it via ip-api.com,
+ * parses device/browser from the user-agent, then emails a security alert.
+ * Every step is guarded — the route never throws and never blocks login.
+ */
 export async function POST(req) {
+  let body = {};
   try {
-    const body = await req.json();
-    const { email, name, deviceType, browser, location, time } = body;
+    body = await req.json();
+  } catch {
+    return Response.json({ success: false, error: 'Invalid request body.' }, { status: 400 });
+  }
 
-    // We use Ethereal Email for testing (it catches all emails and provides a link to view them).
-    // In production, you would swap these out for real SMTP credentials (e.g. Gmail App Password, SendGrid, etc).
-    let transporter = nodemailer.createTransport({
-      host: "smtp.ethereal.email",
-      port: 587,
-      secure: false,
-      auth: {
-        user: "lillian.hegmann58@ethereal.email",
-        pass: "VwGstW4j154xN2c9Kq",
-      },
+  const { email, name } = body || {};
+
+  if (!email) {
+    return Response.json({ success: false, error: 'No recipient email.' }, { status: 400 });
+  }
+
+  try {
+    const headers = req.headers;
+
+    // ----- 1. Client IP --------------------------------------------------
+    const ip = getClientIp(headers);
+
+    // ----- 2. Geolocation (best-effort) ----------------------------------
+    const location = await lookupLocation(ip);
+
+    // ----- 3. Device / browser from User-Agent ---------------------------
+    const userAgent = headers.get('user-agent') || '';
+    const device = parseUserAgent(userAgent);
+
+    // ----- 4. Timestamp + absolute reset URL -----------------------------
+    const when = new Date().toLocaleString('en-US', {
+      dateStyle: 'long',
+      timeStyle: 'short',
+    });
+    const resetUrl = `${getOrigin(req)}/login`;
+
+    // ----- 5. Send (no-ops gracefully if creds missing) ------------------
+    const html = loginAlertEmailHtml({
+      name,
+      when,
+      location,
+      device,
+      ip: isLoopback(ip) ? `${ip} (local)` : ip,
+      resetUrl,
     });
 
-    const mailOptions = {
-      from: '"MTU Security System" <security@mtu.edu.ng>',
+    const result = await sendMail({
       to: email,
-      subject: 'Security Alert: New Login to MTU Portal',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #0d9488; margin-top: 0; text-transform: uppercase;">Security Dispatch</h2>
-          <p style="color: #334155; font-size: 16px;">Hello ${name || 'User'},</p>
-          <p style="color: #334155; font-size: 16px;">We detected a new login to your Mountain Top University portal account.</p>
-          
-          <table style="width: 100%; border-collapse: collapse; margin: 24px 0; background-color: #f8fafc;">
-            <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #475569; width: 120px;">Time:</td>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${time}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #475569;">Device:</td>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${deviceType}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #475569;">Browser:</td>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${browser}</td>
-            </tr>
-            <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; font-weight: bold; color: #475569;">Location:</td>
-              <td style="padding: 12px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${location}</td>
-            </tr>
-          </table>
+      subject: 'Security Alert: New Login to Your MTU Account',
+      html,
+    });
 
-          <p style="color: #334155; font-size: 15px;">If this was you, you can safely ignore this email.</p>
-          <p style="color: #b91c1c; font-size: 15px; font-weight: bold;">If this wasn't you, please change your password immediately and contact IT support.</p>
-          
-          <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 30px 0 20px;" />
-          <p style="color: #94a3b8; font-size: 12px; text-align: center;">This is an automated message from the MTU Institutional V-LINK Protocol.</p>
-        </div>
-      `
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    const previewUrl = nodemailer.getTestMessageUrl(info);
-    
-    console.log("Message sent: %s", info.messageId);
-    console.log("Preview URL: %s", previewUrl);
-    
-    return new Response(JSON.stringify({ success: true, previewUrl }), { status: 200 });
+    return Response.json(
+      { success: true, sent: result.sent, previewUrl: result.previewUrl || null, location, device },
+      { status: 200 },
+    );
   } catch (error) {
-    console.error("Email send error:", error);
-    return new Response(JSON.stringify({ success: false, error: error.message }), { status: 500 });
+    // Never block login on an alerting failure.
+    console.error('[api/login-alert] Unexpected error:', error && error.message);
+    return Response.json({ success: true, sent: false, error: 'Alert skipped.' }, { status: 200 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Extract the originating client IP from proxy headers. */
+function getClientIp(headers) {
+  const forwarded = headers.get('x-forwarded-for');
+  if (forwarded) {
+    // May be a comma-separated chain; the first entry is the client.
+    const first = forwarded.split(',')[0].trim();
+    if (first) return normalizeIp(first);
+  }
+  const real = headers.get('x-real-ip');
+  if (real) return normalizeIp(real.trim());
+
+  return '127.0.0.1';
+}
+
+/** Strip an IPv6-mapped IPv4 prefix (::ffff:1.2.3.4 -> 1.2.3.4). */
+function normalizeIp(ip) {
+  if (!ip) return ip;
+  if (ip.startsWith('::ffff:')) return ip.slice(7);
+  return ip;
+}
+
+/** True for localhost / private-range addresses that can't be geolocated. */
+function isLoopback(ip) {
+  if (!ip) return true;
+  return (
+    ip === '127.0.0.1' ||
+    ip === '::1' ||
+    ip === 'localhost' ||
+    ip.startsWith('10.') ||
+    ip.startsWith('192.168.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
+  );
+}
+
+/** Geolocate an IP via ip-api.com; returns a human string or 'Location unavailable'. */
+async function lookupLocation(ip) {
+  if (isLoopback(ip)) return 'Location unavailable';
+
+  try {
+    const res = await fetch(
+      `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,country,regionName,city`,
+      { signal: AbortSignal.timeout ? AbortSignal.timeout(4000) : undefined },
+    );
+    if (!res.ok) return 'Location unavailable';
+
+    const data = await res.json();
+    if (!data || data.status !== 'success') return 'Location unavailable';
+
+    const parts = [data.city, data.regionName, data.country].filter(Boolean);
+    return parts.length ? parts.join(', ') : 'Location unavailable';
+  } catch (err) {
+    console.error('[api/login-alert] Geolocation lookup failed:', err && err.message);
+    return 'Location unavailable';
+  }
+}
+
+/** Parse browser + OS from a User-Agent string into "Browser on OS". */
+function parseUserAgent(ua) {
+  if (!ua) return 'Unknown device';
+
+  // Browser (order matters: Edge before Chrome, Chrome before Safari).
+  let browser = 'Unknown browser';
+  if (/\bEdg\/|\bEdge\//i.test(ua)) browser = 'Edge';
+  else if (/\bOPR\/|\bOpera\b/i.test(ua)) browser = 'Opera';
+  else if (/\bFirefox\//i.test(ua)) browser = 'Firefox';
+  else if (/\bChrome\//i.test(ua) && !/\bChromium\//i.test(ua)) browser = 'Chrome';
+  else if (/\bChromium\//i.test(ua)) browser = 'Chromium';
+  else if (/\bSafari\//i.test(ua) && !/\bChrome\//i.test(ua)) browser = 'Safari';
+
+  // Operating system.
+  let os = 'Unknown OS';
+  if (/\bWindows\b/i.test(ua)) os = 'Windows';
+  else if (/\bAndroid\b/i.test(ua)) os = 'Android'; // before Linux (Android UAs include Linux)
+  else if (/\b(iPhone|iPad|iPod)\b/i.test(ua) || /\biOS\b/i.test(ua)) os = 'iOS';
+  else if (/\bMac OS X\b|\bMacintosh\b/i.test(ua)) os = 'macOS';
+  else if (/\bLinux\b/i.test(ua)) os = 'Linux';
+
+  if (browser === 'Unknown browser' && os === 'Unknown OS') return 'Unknown device';
+  return `${browser} on ${os}`;
+}
+
+/** Resolve the request origin (protocol + host) for absolute links. */
+function getOrigin(req) {
+  try {
+    const h = req.headers;
+    const host = h.get('x-forwarded-host') || h.get('host');
+    const proto = h.get('x-forwarded-proto') || 'http';
+    if (host) return `${proto}://${host}`;
+    return new URL(req.url).origin;
+  } catch {
+    return process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
   }
 }

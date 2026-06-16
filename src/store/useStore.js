@@ -79,6 +79,7 @@ export const useStore = create(
         notes: [], // personal notepad entries (per-user, see NOTEPAD ACTIONS)
         liveSessions: [],
         scheduledSessions: [], // Future engagements
+        sessionAttendance: [], // per video/voice session attendance records (see ATTENDANCE shape)
         currentSession: '2025/2026',
         currentSemester: '1st',
         semesterOpen: true, // is the current semester open for registration?
@@ -86,6 +87,20 @@ export const useStore = create(
         auditingUser: null,
         _hasHydrated: false,
         setHasHydrated: (val) => set({ _hasHydrated: val }),
+
+        // Fire-and-forget welcome email on account creation. SSR/non-browser
+        // safe (guards typeof window/fetch); never awaited; errors swallowed so
+        // it can NEVER block or change the signup/addUser return value.
+        _fireWelcomeEmail: ({ email, name, role } = {}) => {
+          if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+          try {
+            fetch('/api/welcome', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, name, role }),
+            }).catch(() => { /* swallow */ });
+          } catch { /* swallow — never block account creation */ }
+        },
 
         // ─── FACULTY PORTAL GATE ───
         lecturerPortalActive: true,
@@ -134,24 +149,29 @@ export const useStore = create(
               else if (ua.includes("Edge")) browser = "Microsoft Edge";
             }
 
-            // Dispatch to real email API
-            if (typeof window !== 'undefined') {
-              fetch('/api/login-alert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: foundUser.email,
-                  name: foundUser.name,
-                  deviceType,
-                  browser,
-                  location,
-                  time: new Date().toLocaleString()
-                })
-              }).then(res => res.json()).then(data => {
-                if(data.previewUrl) {
-                  console.log("Email Sent! Preview it here:", data.previewUrl);
-                }
-              }).catch(err => console.error("Failed to send security email:", err));
+            // Dispatch to real email API — fire-and-forget, never blocks auth.
+            // Sends the spec contract { email, name, role } plus the device
+            // context the login-alert route renders into the email body.
+            if (typeof window !== 'undefined' && typeof fetch === 'function') {
+              try {
+                fetch('/api/login-alert', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    email: foundUser.email,
+                    name: foundUser.name,
+                    role: foundUser.role,
+                    deviceType,
+                    browser,
+                    location,
+                    time: new Date().toLocaleString()
+                  })
+                }).then(res => res.json()).then(data => {
+                  if(data.previewUrl) {
+                    console.log("Email Sent! Preview it here:", data.previewUrl);
+                  }
+                }).catch(err => console.error("Failed to send security email:", err));
+              } catch { /* swallow — auth must never fail on email dispatch */ }
             }
 
             set(state => ({ 
@@ -210,6 +230,16 @@ export const useStore = create(
             dynamicUsers: [...state.dynamicUsers, newUser],
             user: newUser
           }));
+
+          // Fire-and-forget side effects — must NOT block or change the return.
+          get()._fireWelcomeEmail({ email: newUser.email, name: newUser.name, role: newUser.role });
+          get().pushNotification({
+            target: 'admin',
+            type: 'system',
+            text: `New ${newUser.role} account created: ${newUser.name}`,
+            link: '/admin',
+          });
+
           return { success: true, role: newUser.role };
         },
 
@@ -362,17 +392,25 @@ export const useStore = create(
           { id: 6, courseId: 5, title: 'Electric Circuits', author: 'Nilsson & Riedel', edition: '11th Ed', type: 'textbook', url: '#' },
         ],
 
-        // Assignments
+        // Assignments — rich model (see ASSIGNMENT shape). Seed assignments are
+        // normalized to the new shape: each carries instructions/startAt/dueDate/
+        // totalMarks/allowedFormats/status('draft'|'active'|'closed')/extensions.
+        // Legacy fields kept for backward-compatible UI: `description` (alias of
+        // `instructions`), `maxScore` (alias of `totalMarks`), and `createdBy`
+        // (alias of `lecturerId`). Existing pages read these unchanged.
         assignments: [
-          { id: 1, courseId: 1, title: 'Newton\'s Laws Problem Set', description: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', dueDate: new Date(Date.now() + 86400000 * 3).toISOString(), maxScore: 50, createdBy: 'LEC/2024/001', status: 'active' },
-          { id: 2, courseId: 2, title: 'Build a Responsive Webpage', description: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', dueDate: new Date(Date.now() + 86400000 * 7).toISOString(), maxScore: 100, createdBy: 'LEC/2024/001', status: 'active' },
-          { id: 3, courseId: 3, title: 'Essay: Academic Communication', description: 'Write a 500-word essay on the importance of academic integrity in university education.', dueDate: new Date(Date.now() - 86400000 * 1).toISOString(), maxScore: 50, createdBy: 'LEC/2024/001', status: 'closed' },
-          { id: 4, courseId: 1, title: 'Circuit Analysis Report', description: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', dueDate: new Date(Date.now() + 86400000 * 5).toISOString(), maxScore: 75, createdBy: 'LEC/2024/001', status: 'active' },
+          { id: 1, courseId: 1, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Newton\'s Laws Problem Set', instructions: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', description: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', startAt: new Date(Date.now() - 86400000 * 2).toISOString(), dueDate: new Date(Date.now() + 86400000 * 3).toISOString(), totalMarks: 50, maxScore: 50, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'active', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
+          { id: 2, courseId: 2, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Build a Responsive Webpage', instructions: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', description: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', startAt: new Date(Date.now() - 86400000 * 2).toISOString(), dueDate: new Date(Date.now() + 86400000 * 7).toISOString(), totalMarks: 100, maxScore: 100, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'active', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
+          { id: 3, courseId: 3, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Essay: Academic Communication', instructions: 'Write a 500-word essay on the importance of academic integrity in university education.', description: 'Write a 500-word essay on the importance of academic integrity in university education.', startAt: new Date(Date.now() - 86400000 * 10).toISOString(), dueDate: new Date(Date.now() - 86400000 * 1).toISOString(), totalMarks: 50, maxScore: 50, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'closed', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 10).toISOString() },
+          { id: 4, courseId: 1, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Circuit Analysis Report', instructions: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', description: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', startAt: new Date(Date.now() - 86400000 * 2).toISOString(), dueDate: new Date(Date.now() + 86400000 * 5).toISOString(), totalMarks: 75, maxScore: 75, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'active', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
         ],
 
-        // Student submissions
+        // Student submissions — rich model. New canonical fields: answerText,
+        // file ({name,data,size}|null), status ('submitted'|'graded'). Legacy
+        // aliases kept for current UI: `content` (alias of answerText) and
+        // `attachment` (alias of file).
         submissions: [
-          { id: 1, assignmentId: 3, studentId: 'student-1', studentName: 'Victor Adeleke', content: 'Academic integrity is the foundation of learning...', submittedAt: new Date(Date.now() - 86400000 * 2).toISOString(), score: null, feedback: '' },
+          { id: 1, assignmentId: 3, studentId: 'student-1', studentName: 'Victor Adeleke', answerText: 'Academic integrity is the foundation of learning...', content: 'Academic integrity is the foundation of learning...', file: null, attachment: null, submittedAt: new Date(Date.now() - 86400000 * 2).toISOString(), score: null, feedback: '', status: 'submitted' },
         ],
 
         // Quizzes — rich model (see QUIZ shape). Seed quizzes are normalized to
@@ -789,14 +827,28 @@ export const useStore = create(
           
           const lecturer = get().getCourseAssignedLecturer(courseId);
           const sessionId = targetCourse.code + '-' + Date.now();
-          
+
+          const startISO = new Date().toISOString();
+          // Default a live session to a 2-hour window unless an explicit
+          // durationMinutes/endAt is provided. endAt drives getSessionStatus.
+          const durationMin = Number.isFinite(settings.durationMinutes)
+            ? settings.durationMinutes
+            : (parseInt(settings.durationMinutes, 10) || 120);
+          const endISO = settings.endAt ?? new Date(Date.now() + durationMin * 60000).toISOString();
+
           const newSession = {
             id: sessionId,
             courseId: courseId,
             title: targetCourse.title,
             lecturerName: lecturer?.name || 'Academic Lead',
             lecturerId: lecturer?.id,
-            startTime: new Date().toISOString(),
+            startTime: startISO,
+            // ─ video-session model ─
+            sessionType: settings.sessionType === 'voice' ? 'voice' : 'video',
+            startAt: startISO,
+            endAt: endISO,
+            recording: settings.recordLocally ?? settings.recording ?? false,
+            status: 'live',
             settings: {
               muteOnEntry: settings.muteOnEntry ?? true,
               waitingRoom: settings.waitingRoom ?? false,
@@ -911,18 +963,27 @@ export const useStore = create(
           }));
         },
         endLiveSession: (sessionId) => {
+          const nowISO = new Date().toISOString();
           const session = get().liveSessions.find(s => s.id === sessionId);
           if (session) {
             const logEntry = {
               ...session,
-              endTime: new Date().toISOString(),
+              status: 'ended',
+              endTime: nowISO,
+              endAt: session.endAt ?? nowISO,
               duration: Math.round((Date.now() - new Date(session.startTime).getTime()) / 60000) + 'm'
             };
             set(state => ({ callHistory: [logEntry, ...state.callHistory] }));
           }
+          // Close out any still-open attendance records for this session.
           set(state => ({
             liveSessions: state.liveSessions.filter(s => s.id !== sessionId),
-            sessionMessages: state.sessionMessages.filter(m => m.sessionId !== sessionId)
+            sessionMessages: state.sessionMessages.filter(m => m.sessionId !== sessionId),
+            sessionAttendance: state.sessionAttendance.map(a => {
+              if (a.sessionId !== sessionId || a.leaveTime) return a;
+              const durationSec = Math.max(0, Math.round((Date.parse(nowISO) - Date.parse(a.joinTime)) / 1000));
+              return { ...a, leaveTime: nowISO, durationSec };
+            }),
           }));
         },
         sendSessionMessage: (sessionId, content) => {
@@ -941,31 +1002,343 @@ export const useStore = create(
           }));
         },
 
-        // ─── ASSIGNMENT ACTIONS ───
-        addAssignment: (assignment) => set((state) => ({
-          assignments: [...state.assignments, { ...assignment, id: Date.now(), status: 'active' }]
-        })),
-        submitAssignment: (assignmentId, content, attachment = null) => {
-          const { user } = get();
+        // ─── VIDEO SESSION + ATTENDANCE ACTIONS ───
+        // Lifecycle of a session relative to now. A session is 'live' ONLY
+        // between startAt and endAt; before startAt it is 'upcoming', after
+        // endAt it is 'ended'. Falls back to startTime when startAt is absent
+        // (legacy live sessions), and treats a missing endAt as open-ended.
+        getSessionStatus: (session) => {
+          if (!session) return 'ended';
+          if (session.status === 'ended') return 'ended';
+          const now = Date.now();
+          const start = Date.parse(session.startAt ?? session.startTime ?? session.dateTime);
+          const end = Date.parse(session.endAt);
+          if (!Number.isNaN(start) && now < start) return 'upcoming';
+          if (!Number.isNaN(end) && now > end) return 'ended';
+          return 'live';
+        },
+
+        // Record (or update) a user's JOIN on a session. Idempotent per
+        // user/session: a second join updates the existing record rather than
+        // duplicating it. Marked 'present' if within 15 minutes of startAt,
+        // otherwise 'late'. Returns the attendance record.
+        recordAttendanceJoin: (sessionId, userObj = {}) => {
+          const state = get();
+          const userId = userObj.id ?? userObj.userId;
+          if (!sessionId || !userId) return null;
+
+          const session = state.liveSessions.find(s => s.id === sessionId)
+            || state.scheduledSessions.find(s => s.id === sessionId)
+            || state.callHistory.find(s => s.id === sessionId);
+          const startRef = Date.parse(session?.startAt ?? session?.startTime ?? session?.dateTime);
+          const joinISO = new Date().toISOString();
+          const lateThreshold = 15 * 60 * 1000; // 15 minutes
+          const status = (!Number.isNaN(startRef) && Date.now() - startRef > lateThreshold) ? 'late' : 'present';
+
+          const existing = state.sessionAttendance.find(
+            a => a.sessionId === sessionId && a.userId === userId
+          );
+
+          let record = null;
+          if (existing) {
+            // Re-join: reopen the record, keep the original join status/time.
+            set((s) => ({
+              sessionAttendance: s.sessionAttendance.map(a => {
+                if (a.sessionId !== sessionId || a.userId !== userId) return a;
+                record = { ...a, leaveTime: null, durationSec: a.durationSec ?? 0 };
+                return record;
+              }),
+            }));
+          } else {
+            record = {
+              sessionId,
+              userId,
+              name: userObj.name ?? '',
+              role: userObj.role ?? 'student',
+              joinTime: joinISO,
+              leaveTime: null,
+              durationSec: 0,
+              status,
+            };
+            set((s) => ({ sessionAttendance: [...s.sessionAttendance, record] }));
+          }
+          return record;
+        },
+
+        // Record a user's LEAVE on a session: set leaveTime and accumulate
+        // durationSec from joinTime. No-op if there is no open record.
+        recordAttendanceLeave: (sessionId, userId) => {
+          const state = get();
+          const existing = state.sessionAttendance.find(
+            a => a.sessionId === sessionId && a.userId === userId
+          );
+          if (!existing) return null;
+          const leaveISO = new Date().toISOString();
+          const durationSec = Math.max(
+            0,
+            Math.round((Date.parse(leaveISO) - Date.parse(existing.joinTime)) / 1000)
+          );
+          let record = null;
+          set((s) => ({
+            sessionAttendance: s.sessionAttendance.map(a => {
+              if (a.sessionId !== sessionId || a.userId !== userId) return a;
+              record = { ...a, leaveTime: leaveISO, durationSec };
+              return record;
+            }),
+          }));
+          return record;
+        },
+
+        // All attendance records for a session.
+        getSessionAttendance: (sessionId) =>
+          get().sessionAttendance.filter(a => a.sessionId === sessionId),
+
+        // Push a live session's end time out by `minutes` (lecturer control).
+        extendSessionEnd: (sessionId, minutes) => {
+          const add = (Number.isFinite(minutes) ? minutes : (parseInt(minutes, 10) || 0)) * 60000;
+          if (!add) return null;
+          let updated = null;
           set((state) => ({
-            submissions: [...state.submissions, {
-              id: Date.now(),
-              assignmentId,
-              studentId: user.id,
-              studentName: user.name,
-              content,
-              attachment,
-              submittedAt: new Date().toISOString(),
-              score: null,
-              feedback: ''
-            }]
+            liveSessions: state.liveSessions.map(s => {
+              if (s.id !== sessionId) return s;
+              const base = Date.parse(s.endAt) || Date.now();
+              updated = { ...s, endAt: new Date(base + add).toISOString() };
+              return updated;
+            }),
+            scheduledSessions: state.scheduledSessions.map(s => {
+              if (s.id !== sessionId || !s.endAt) return s;
+              const base = Date.parse(s.endAt) || Date.now();
+              updated = { ...s, endAt: new Date(base + add).toISOString() };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        // ─── ASSIGNMENT ACTIONS (rich model) ───
+        // The effective due date for a student: their per-student extension if
+        // present, otherwise the assignment's dueDate. Returns ms epoch or NaN.
+        _effectiveDueMs: (assignment, studentId) => {
+          if (!assignment) return NaN;
+          const ext = assignment.extensions?.[studentId];
+          return Date.parse(ext || assignment.dueDate);
+        },
+
+        // Create a DRAFT assignment owned by the current user. Keeps both the
+        // canonical (instructions/totalMarks/lecturerId) and legacy
+        // (description/maxScore/createdBy) fields coherent so existing
+        // lecturer pages that pass {description, maxScore, createdBy} keep working.
+        addAssignment: (data = {}) => {
+          const { user } = get();
+          const id = Date.now();
+          const nowISO = new Date().toISOString();
+          const instructions = data.instructions ?? data.description ?? '';
+          const totalMarks = Number.isFinite(data.totalMarks)
+            ? data.totalMarks
+            : (parseInt(data.totalMarks ?? data.maxScore, 10) || 0);
+          const lecturerId = data.lecturerId ?? data.createdBy ?? user?.id ?? null;
+          const courseId = typeof data.courseId === 'string'
+            ? (parseInt(data.courseId, 10) || data.courseId)
+            : data.courseId;
+          const assignment = {
+            id,
+            courseId,
+            lecturerId,
+            createdBy: lecturerId, // legacy alias
+            title: data.title ?? '',
+            instructions,
+            description: instructions, // legacy alias
+            startAt: data.startAt ?? nowISO,
+            dueDate: data.dueDate ?? new Date(Date.now() + 86400000 * 7).toISOString(),
+            totalMarks,
+            maxScore: totalMarks, // legacy alias
+            allowedFormats: Array.isArray(data.allowedFormats) ? data.allowedFormats : ['pdf', 'docx'],
+            maxFileSizeMB: Number.isFinite(data.maxFileSizeMB) ? data.maxFileSizeMB : (parseInt(data.maxFileSizeMB, 10) || 10),
+            attachment: data.attachment ?? null,
+            rubric: data.rubric ?? null,
+            rubricVisible: data.rubricVisible ?? false,
+            status: 'draft',
+            extensions: data.extensions && typeof data.extensions === 'object' ? { ...data.extensions } : {},
+            createdAt: nowISO,
+          };
+          set((state) => ({ assignments: [...state.assignments, assignment] }));
+          return assignment;
+        },
+
+        // Patch an assignment (owner only). Once ANY submission exists, restrict
+        // the patch to deadline/extension fields only (dueDate, extensions,
+        // status) so the task spec/marks/instructions can't change mid-flight.
+        // Keeps legacy aliases coherent. Recomputes nothing destructive.
+        updateAssignment: (id, patch = {}) => {
+          const state = get();
+          const asgn = state.assignments.find(a => a.id === id);
+          if (!asgn) return null;
+          const owner = asgn.lecturerId ?? asgn.createdBy;
+          if (owner && state.user && owner !== state.user.id) return null;
+
+          const hasSubmissions = state.submissions.some(s => s.assignmentId === id);
+          let next;
+          if (hasSubmissions) {
+            // deadline/extension/status only
+            next = {};
+            if (patch.dueDate !== undefined) next.dueDate = patch.dueDate;
+            if (patch.extensions !== undefined) next.extensions = { ...(asgn.extensions || {}), ...patch.extensions };
+            if (patch.status !== undefined) next.status = patch.status;
+          } else {
+            next = { ...patch };
+            // keep canonical<->legacy aliases coherent
+            if (next.instructions !== undefined) next.description = next.instructions;
+            else if (next.description !== undefined) next.instructions = next.description;
+            if (next.totalMarks !== undefined) {
+              next.totalMarks = Number.isFinite(next.totalMarks) ? next.totalMarks : (parseInt(next.totalMarks, 10) || 0);
+              next.maxScore = next.totalMarks;
+            } else if (next.maxScore !== undefined) {
+              next.maxScore = Number.isFinite(next.maxScore) ? next.maxScore : (parseInt(next.maxScore, 10) || 0);
+              next.totalMarks = next.maxScore;
+            }
+            if (next.extensions !== undefined) next.extensions = { ...(asgn.extensions || {}), ...next.extensions };
+          }
+
+          let updated = null;
+          set((s) => ({
+            assignments: s.assignments.map(a => {
+              if (a.id !== id) return a;
+              updated = { ...a, ...next, id: a.id, lecturerId: a.lecturerId, createdBy: a.createdBy, createdAt: a.createdAt };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        // Delete an assignment (owner only) and its submissions.
+        deleteAssignment: (id) => {
+          const state = get();
+          const asgn = state.assignments.find(a => a.id === id);
+          if (!asgn) return;
+          const owner = asgn.lecturerId ?? asgn.createdBy;
+          if (owner && state.user && owner !== state.user.id) return;
+          set((s) => ({
+            assignments: s.assignments.filter(a => a.id !== id),
+            submissions: s.submissions.filter(sub => sub.assignmentId !== id),
           }));
         },
-        gradeSubmission: (submissionId, score, feedback) => set((state) => ({
-          submissions: state.submissions.map(s =>
-            s.id === submissionId ? { ...s, score, feedback } : s
-          )
-        })),
+
+        // Publish a draft assignment -> status 'active' and notify students.
+        publishAssignment: (id) => {
+          const state = get();
+          const asgn = state.assignments.find(a => a.id === id);
+          if (!asgn) return null;
+          const owner = asgn.lecturerId ?? asgn.createdBy;
+          if (owner && state.user && owner !== state.user.id) return null;
+          set((s) => ({
+            assignments: s.assignments.map(a => a.id === id ? { ...a, status: 'active' } : a),
+          }));
+          const course = state.courses.find(c => c.id === asgn.courseId);
+          const courseCode = course?.code || 'Course';
+          state.pushNotification({
+            target: 'student',
+            type: 'assignment',
+            text: `New assignment published: "${asgn.title}" (${courseCode})`,
+            link: '/dashboard/assignments',
+          });
+          return get().assignments.find(a => a.id === id);
+        },
+
+        // Extend the global deadline for an assignment (owner-scoped).
+        extendAssignmentDeadline: (id, newDueISO) =>
+          get().updateAssignment(id, { dueDate: newDueISO }),
+
+        // Extend the deadline for a SINGLE student (owner-scoped).
+        extendStudentDeadline: (id, studentId, newDueISO) =>
+          get().updateAssignment(id, { extensions: { [studentId]: newDueISO } }),
+
+        // Lifecycle status of an assignment FOR A STUDENT, honoring that
+        // student's per-student extension. Returns 'upcoming'|'active'|'closed'.
+        getAssignmentStatus: (assignment, studentId) => {
+          if (!assignment) return 'closed';
+          if (assignment.status === 'draft') return 'upcoming';
+          if (assignment.status === 'closed') return 'closed';
+          const now = Date.now();
+          const start = Date.parse(assignment.startAt);
+          if (!Number.isNaN(start) && now < start) return 'upcoming';
+          const due = get()._effectiveDueMs(assignment, studentId);
+          if (!Number.isNaN(due) && now > due) return 'closed';
+          return 'active';
+        },
+
+        // Submit (or RESUBMIT) the current student's work for an assignment.
+        // A resubmission REPLACES the student's prior submission. Rejected (and
+        // returns { error }) if past the effective due date. Keeps the legacy
+        // 3-arg signature (assignmentId, answerText/content, file/attachment).
+        submitAssignment: (assignmentId, answerText = '', file = null) => {
+          const state = get();
+          const { user } = state;
+          if (!user) return { error: 'Not signed in.' };
+          const assignment = state.assignments.find(a => a.id === assignmentId);
+          if (!assignment) return { error: 'Assignment not found.' };
+
+          // Reject past the effective due date (global dueDate or this student's
+          // extension), and reject explicitly closed assignments.
+          if (assignment.status === 'closed') return { error: 'This assignment is closed.' };
+          const due = state._effectiveDueMs(assignment, user.id);
+          if (!Number.isNaN(due) && Date.now() > due) {
+            return { error: 'The deadline for this assignment has passed.' };
+          }
+
+          const submittedAt = new Date().toISOString();
+          const existing = state.submissions.find(
+            s => s.assignmentId === assignmentId && s.studentId === user.id
+          );
+          const submission = {
+            id: existing ? existing.id : nextId(),
+            assignmentId,
+            studentId: user.id,
+            studentName: user.name,
+            answerText: answerText ?? '',
+            content: answerText ?? '', // legacy alias
+            file: file ?? null,
+            attachment: file ?? null, // legacy alias
+            submittedAt,
+            score: null,
+            feedback: '',
+            status: 'submitted',
+          };
+
+          set((s) => ({
+            submissions: existing
+              ? s.submissions.map(sub => sub.id === existing.id ? submission : sub)
+              : [...s.submissions, submission],
+          }));
+          return submission;
+        },
+
+        // Grade a submission and notify the student. Sets status 'graded'.
+        gradeSubmission: (submissionId, score, feedback = '') => {
+          const state = get();
+          const sub = state.submissions.find(s => s.id === submissionId);
+          if (!sub) return null;
+          const numericScore = Number.isFinite(score) ? score : (parseInt(score, 10) || 0);
+          let updated = null;
+          set((s) => ({
+            submissions: s.submissions.map(x => {
+              if (x.id !== submissionId) return x;
+              updated = { ...x, score: numericScore, feedback: feedback ?? '', status: 'graded' };
+              return updated;
+            }),
+          }));
+          const assignment = state.assignments.find(a => a.id === sub.assignmentId);
+          state.pushNotification({
+            recipientId: sub.studentId,
+            type: 'assignment',
+            text: `Your assignment "${assignment?.title || 'submission'}" has been graded`,
+            link: '/dashboard/assignments',
+          });
+          return updated;
+        },
+
+        // All submissions for an assignment (lecturer view).
+        getAssignmentSubmissions: (assignmentId) =>
+          get().submissions.filter(s => s.assignmentId === assignmentId),
 
         // ─── QUIZ ACTIONS (rich model) ───
         // Recompute totalMarks as the sum of question marks (ints, default 1).
@@ -1685,6 +2058,16 @@ export const useStore = create(
             status: 'active'
           };
           set(state => ({ dynamicUsers: [...state.dynamicUsers, newUser] }));
+
+          // Fire-and-forget side effects — must NOT block or change the return.
+          get()._fireWelcomeEmail({ email: newUser.email, name: newUser.name, role: newUser.role });
+          get().pushNotification({
+            target: 'admin',
+            type: 'system',
+            text: `New ${newUser.role} account created: ${newUser.name}`,
+            link: '/admin',
+          });
+
           return { success: true };
         },
 
@@ -1817,23 +2200,37 @@ export const useStore = create(
           }));
         },
 
-        scheduleSession: (courseId, dateTime) => {
-          const { courses } = get();
+        scheduleSession: (courseId, dateTime, opts = {}) => {
+          const { courses, user } = get();
           const targetCourse = courses.find(c => c.id === courseId);
           if (!targetCourse) return;
+
+          const startISO = opts.startAt ?? dateTime;
+          const durationMin = Number.isFinite(opts.durationMinutes)
+            ? opts.durationMinutes
+            : (parseInt(opts.durationMinutes, 10) || 120);
+          const endISO = opts.endAt ?? (startISO ? new Date(new Date(startISO).getTime() + durationMin * 60000).toISOString() : null);
 
           const newScheduled = {
             id: Date.now(),
             courseId,
             courseCode: targetCourse.code,
             title: targetCourse.title,
-            dateTime: dateTime,
-            lecturerName: get().user.name
+            dateTime: dateTime, // legacy field kept for existing UI
+            lecturerName: user?.name,
+            lecturerId: user?.id,
+            // ─ video-session model ─
+            sessionType: opts.sessionType === 'voice' ? 'voice' : 'video',
+            startAt: startISO,
+            endAt: endISO,
+            recording: opts.recording ?? false,
+            status: 'upcoming',
           };
 
           set(state => ({
             scheduledSessions: [...state.scheduledSessions, newScheduled]
           }));
+          return newScheduled;
         },
 
         deleteScheduledSession: (id) => {
@@ -2118,9 +2515,11 @@ export const useStore = create(
         sessionHistory: state.sessionHistory,
         liveSessions: state.liveSessions,
         scheduledSessions: state.scheduledSessions,
+        sessionAttendance: state.sessionAttendance,
         auditingUser: state.auditingUser,
         lecturerPortalActive: state.lecturerPortalActive,
         notifications: state.notifications,
+        assignments: state.assignments,
         submissions: state.submissions,
         quizResults: state.quizResults,
         quizAttempts: state.quizAttempts,
