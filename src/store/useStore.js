@@ -2495,7 +2495,8 @@ export const useStore = create(
     {
       name: 'lms-database-storage-v13',
       storage: createJSONStorage(() => localStorage),
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: () => (state, error) => {
+        if (error) console.warn('[store] rehydrate error — continuing without persisted state', error);
         if (state) state.setHasHydrated(true);
       },
       // Persist dynamic/user-specific data. Seed courses stay in code (source of
@@ -2549,3 +2550,14 @@ export const useStore = create(
     }
   )
 );
+
+// Failsafe: never let the UI hang on the "Preparing your session" hydration gate.
+// If persist rehydration stalls or errors (e.g. corrupt/foreign-origin localStorage),
+// force the hydrated flag shortly after load so login/dashboard stay interactive.
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    if (!useStore.getState()._hasHydrated) {
+      useStore.getState().setHasHydrated(true);
+    }
+  }, 1500);
+}
