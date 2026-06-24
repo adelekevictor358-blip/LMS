@@ -4,12 +4,18 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
 import { useState, useEffect } from 'react';
-import { Mail, Lock, GraduationCap, ArrowRight, Loader2 } from 'lucide-react';
-import adminImg from '@/ADMIN.jpg';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Mail, Lock, Loader2 } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
+// Campus imagery shown in the sign-in carousel (left panel).
+const SLIDES = [
+  { src: '/study-image-1.jpg', alt: 'Students studying together at Mountain Top University' },
+  { src: '/manchi.jpg', alt: 'Mountain Top University campus life' },
+  { src: '/dljoy.jpg', alt: 'Mountain Top University campus life' },
+  { src: '/ADMIN.jpg', alt: 'Mountain Top University administrative building' },
+];
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,11 +28,18 @@ export default function LoginPage() {
   const [emailError, setEmailError] = useState('');
   const [loading, setLoading] = useState(false);
   const [ready, setReady] = useState(false);
+  const [slide, setSlide] = useState(0);
 
   // Wait for store to hydrate before allowing login
   useEffect(() => {
     if (hasHydrated) setReady(true);
   }, [hasHydrated]);
+
+  // Auto-advance the sign-in carousel
+  useEffect(() => {
+    const id = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   const validateEmail = (val) => {
     if (!val) return '';
@@ -49,10 +62,10 @@ export default function LoginPage() {
     setLoading(true);
     const domainErr = validateEmail(email);
     if (domainErr) { setEmailError(domainErr); setLoading(false); return; }
-    
+
     // Login in store is async, so we must await it
     const result = await login(email, password);
-    
+
     if (result.success) {
       if (result.role === 'admin') router.push('/admin');
       else if (result.role === 'lecturer') router.push('/lecturer');
@@ -64,48 +77,96 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 bg-slate-900 overflow-hidden">
-      {/* Background */}
-      <div
-        className="absolute inset-0 z-0 scale-105 blur-sm opacity-40"
-        style={{ backgroundImage: `url(${adminImg.src})`, backgroundSize: 'cover', backgroundPosition: 'center' }}
-      />
-      <div className="absolute inset-0 z-10 bg-gradient-to-br from-slate-950/90 via-slate-900/80 to-transparent" />
+    <main className="min-h-screen grid lg:grid-cols-2 bg-background">
+      {/* Side panel — sliding campus imagery with institutional context */}
+      <aside className="relative hidden lg:block overflow-hidden border-r border-border bg-secondary">
+        {/* Sliding image track */}
+        <div
+          className="absolute inset-0 flex transition-transform duration-700 ease-out"
+          style={{ width: `${SLIDES.length * 100}%`, transform: `translateX(-${slide * (100 / SLIDES.length)}%)` }}
+        >
+          {SLIDES.map((s) => (
+            <div key={s.src} className="relative h-full" style={{ width: `${100 / SLIDES.length}%` }}>
+              <img src={s.src} alt={s.alt} className="h-full w-full object-cover" />
+            </div>
+          ))}
+        </div>
 
-      <Card className="relative z-20 w-full max-w-[460px] border-none shadow-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
-        <div className="h-2 w-full bg-teal-600" />
-        <CardHeader className="space-y-4 pt-10 pb-8 text-center">
-          <div className="mx-auto flex flex-col items-center justify-center mb-2">
-            <div className="h-28 w-28 relative mb-4 drop-shadow-2xl">
-              <img src="/mtu-logo.png" alt="Mountain Top University Logo" className="w-full h-full object-contain" />
+        {/* Legibility overlay (fixed dark tint, theme-independent) */}
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/45 to-slate-950/25" />
+
+        {/* Brand content over the imagery */}
+        <div className="relative z-10 flex h-full flex-col justify-between p-12 text-white">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/95 p-1">
+              <img src="/mtu-logo.png" alt="Mountain Top University logo" className="h-full w-full object-contain" />
+            </span>
+            <span className="font-serif text-lg font-semibold tracking-tight">Mountain Top University</span>
+          </div>
+
+          <div className="max-w-prose space-y-4">
+            <h2 className="font-serif text-3xl font-semibold tracking-tight text-balance">
+              The student and staff portal
+            </h2>
+            <p className="text-sm leading-relaxed text-white/80 text-pretty">
+              Sign in with your institutional account to reach your courses, results, and campus services.
+            </p>
+            <div className="flex items-center gap-2 pt-1" role="tablist" aria-label="Campus highlights">
+              {SLIDES.map((s, i) => (
+                <button
+                  key={s.src}
+                  type="button"
+                  onClick={() => setSlide(i)}
+                  aria-label={`Show image ${i + 1}`}
+                  aria-selected={i === slide}
+                  className={`h-1.5 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${i === slide ? 'w-7 bg-white' : 'w-2.5 bg-white/40 hover:bg-white/60'}`}
+                />
+              ))}
             </div>
           </div>
-          <div className="space-y-2">
-            <CardTitle className="text-3xl font-black tracking-tighter">Mountain Top University</CardTitle>
-            <CardDescription className="text-muted-foreground font-bold text-sm">
-              {!ready ? 'Initializing secure session...' : 'Empowered to Excel · Academic Gateway'}
-            </CardDescription>
-          </div>
-        </CardHeader>
 
-        <CardContent className="px-8 pb-8">
+          <p className="text-xs font-medium uppercase tracking-wide text-white/70">Empowered to excel</p>
+        </div>
+      </aside>
+
+      {/* Sign-in form */}
+      <section className="flex items-center justify-center p-6 animate-fade-in">
+        <div className="w-full max-w-sm space-y-8">
+          <header className="space-y-3 text-center">
+            <img
+              src="/mtu-logo.png"
+              alt="Mountain Top University logo"
+              className="mx-auto h-14 w-14 object-contain lg:hidden"
+            />
+            <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+              Sign in
+            </h1>
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {!ready ? 'Preparing your session' : 'Use your @mtu.edu.ng email to continue'}
+            </p>
+          </header>
+
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-destructive/10 border-l-4 border-destructive text-destructive text-sm font-bold animate-in slide-in-from-top-2 duration-300">
+            <div
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
               {error}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleLogin} className="space-y-5">
             <div className="space-y-2">
-              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">
-                Institutional Email
+              <Label htmlFor="email" className="text-sm font-medium text-foreground">
+                Email
               </Label>
               <div className="relative">
-                <Mail className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
+                <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
+                  id="email"
                   type="email"
                   placeholder="yourname@mtu.edu.ng"
-                  className={`pl-12 h-12 rounded-xl focus-visible:ring-teal-500 ${emailError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
+                  className={`pl-10 h-11 ${emailError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
                   value={email}
                   onChange={handleEmailChange}
                   required
@@ -113,23 +174,22 @@ export default function LoginPage() {
                 />
               </div>
               {emailError && (
-                <p className="text-[11px] font-bold text-red-500 flex items-center gap-1.5 ml-1">
-                  <span>⚠</span> {emailError}
-                </p>
+                <p className="text-xs text-destructive">{emailError}</p>
               )}
             </div>
 
             <div className="space-y-2">
               {/* Reset Credentials button removed — only admin can reset passwords via Admin Portal */}
-              <Label className="text-xs font-black uppercase tracking-widest text-muted-foreground ml-1">
+              <Label htmlFor="password" className="text-sm font-medium text-foreground">
                 Password
               </Label>
               <div className="relative">
-                <Lock className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
+                <Lock className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
+                  id="password"
                   type="password"
-                  placeholder="••••••••"
-                  className="pl-12 h-12 rounded-xl focus-visible:ring-teal-500"
+                  placeholder="Enter your password"
+                  className="pl-10 h-11"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
@@ -138,42 +198,47 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center space-x-2 ml-1">
-              <input type="checkbox" className="rounded-sm border-slate-300 text-teal-600 focus:ring-teal-500" id="remember" />
-              <label htmlFor="remember" className="text-xs font-bold text-muted-foreground cursor-pointer select-none">
-                Maintain persistent session
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="remember"
+                className="h-4 w-4 rounded-sm border-border accent-primary"
+              />
+              <label
+                htmlFor="remember"
+                className="text-sm text-muted-foreground cursor-pointer select-none"
+              >
+                Keep me signed in
               </label>
             </div>
 
             <Button
               type="submit"
               disabled={!ready || loading}
-              className="w-full h-12 bg-teal-600 hover:bg-teal-700 font-black text-white shadow-xl shadow-teal-600/20 rounded-xl transition-all hover:scale-[1.01] active:scale-[0.99] disabled:opacity-60 disabled:cursor-not-allowed disabled:scale-100"
+              className="w-full h-11 active:translate-y-px"
             >
               {loading ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Authenticating...</>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Signing in</>
               ) : !ready ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</>
+                <><Loader2 className="h-4 w-4 animate-spin" /> Loading</>
               ) : (
-                <>Sign In to Portal <ArrowRight className="ml-2 h-4 w-4" /></>
+                'Sign in'
               )}
             </Button>
           </form>
-        </CardContent>
 
-        <CardFooter className="px-8 py-6 bg-slate-50 dark:bg-slate-900 border-t flex justify-center">
-          <p className="text-xs font-bold text-muted-foreground">
-            New user?{' '}
-            <Link href="/signup" className="text-teal-600 hover:underline">Apply for Registration</Link>
-            {' · '}
-            <span className="text-slate-400">Password resets via Admin Portal only.</span>
-          </p>
-        </CardFooter>
-      </Card>
-
-      {/* Decorative elements */}
-      <div className="absolute top-20 left-20 w-32 h-32 bg-teal-600/10 rounded-full blur-3xl animate-pulse" />
-      <div className="absolute bottom-20 right-20 w-48 h-48 bg-blue-600/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '3s' }} />
-    </div>
+          <footer className="text-center text-sm text-muted-foreground text-pretty">
+            New here?{' '}
+            <Link
+              href="/signup"
+              className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline"
+            >
+              Apply for registration
+            </Link>
+            <span className="block mt-1 text-xs">Password resets are handled by the admin portal.</span>
+          </footer>
+        </div>
+      </section>
+    </main>
   );
 }

@@ -3,32 +3,30 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/store/useStore';
-import { useState, useMemo, useEffect } from 'react';
-import { User, Mail, GraduationCap, Building2, Briefcase, BookOpen, Layers, ArrowLeft, ArrowRight, ShieldCheck, UserPlus, Fingerprint } from 'lucide-react';
-import adminImg from '@/ADMIN.jpg';
+import { useState, useMemo } from 'react';
+import { User, Mail, GraduationCap, Building2, BookOpen, Layers, ArrowRight, ShieldCheck, UserPlus, Fingerprint, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 
 export default function StudentSignupPage() {
   const router = useRouter();
   const signup = useStore(state => state.signup);
   const structure = useStore(state => state.getAcademicStructure());
-  
+
   const [form, setForm] = useState({
-    name: '', 
-    email: '', 
-    college: '', 
-    program: '', 
-    level: '100L', 
+    name: '',
+    email: '',
+    college: '',
+    program: '',
+    level: '100L',
     matNo: ''
   });
   const [emailError, setEmailError] = useState('');
 
-  const selectedCollege = useMemo(() => 
-    structure.colleges.find(c => c.name === form.college), 
+  const selectedCollege = useMemo(() =>
+    structure.colleges.find(c => c.name === form.college),
     [form.college, structure]
   );
 
@@ -62,162 +60,163 @@ export default function StudentSignupPage() {
     }
   };
 
-  return (
-    <div className="relative min-h-screen flex items-center justify-center p-6 bg-slate-950 overflow-hidden">
-      {/* Background Overlay */}
-      <div 
-        className="absolute inset-0 z-0 opacity-20 grayscale brightness-50"
-        style={{ 
-          backgroundImage: `url(${adminImg.src})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }}
-      ></div>
-      <div className="absolute inset-0 z-10 bg-gradient-to-br from-slate-950 via-slate-900/90 to-transparent"></div>
+  const selectClass = "flex h-11 w-full rounded-md border border-input bg-background pl-11 pr-3 py-2 text-sm text-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50";
 
-      <Card className="relative z-20 w-full max-w-2xl border-none shadow-2xl bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl animate-in fade-in zoom-in-95 duration-500 overflow-hidden">
-        <div className="h-2 w-full bg-teal-600"></div>
-        <CardHeader className="space-y-4 pt-10 pb-8 text-center border-b">
-          <div className="mx-auto h-16 w-16 rounded-2xl bg-teal-600/10 flex items-center justify-center mb-2">
-             <UserPlus className="h-10 w-10 text-teal-600" />
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-background p-6">
+      <Card className="w-full max-w-2xl border-border shadow-sm animate-fade-in">
+        <CardHeader className="space-y-4 pt-8 pb-6 text-center border-b border-border">
+          <div className="mx-auto h-12 w-12 rounded-xl bg-brand-green-soft flex items-center justify-center">
+            <UserPlus size={22} className="text-brand-green" strokeWidth={1.5} />
           </div>
-          <div className="space-y-2">
-            <CardTitle className="text-3xl font-black tracking-tighter">Academic Admissions</CardTitle>
-            <CardDescription className="text-muted-foreground font-medium text-lg">Register your institutional identity for the new session.</CardDescription>
+          <div className="space-y-1.5">
+            <CardTitle className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+              Student registration
+            </CardTitle>
+            <CardDescription className="text-sm leading-relaxed text-muted-foreground text-pretty">
+              Register your institutional identity for the new session.
+            </CardDescription>
           </div>
         </CardHeader>
 
-        <CardContent className="p-10">
-          <form onSubmit={handleSignup} className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-             {/* Section 1: User Identity */}
-             <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                   <div className="h-1 w-8 bg-teal-600 rounded-full"></div>
-                   <h3 className="text-sm font-black uppercase tracking-widest text-teal-600">Personal Identity</h3>
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                     <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Full Legal Name</Label>
-                     <div className="relative">
-                        <User className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                        <Input type="text" placeholder="e.g. Victor Adeleke" className="pl-12 h-12 rounded-xl focus-visible:ring-teal-600" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required />
-                     </div>
-                  </div>
-                   <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Matriculation Email</Label>
-                      <div className="relative">
-                         <Mail className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                         <Input
-                           type="email"
-                           placeholder="yourname@mtu.edu.ng"
-                           className={`pl-12 h-12 rounded-xl focus-visible:ring-teal-600 ${emailError ? 'border-red-500 focus-visible:ring-red-500' : ''}`}
-                           value={form.email}
-                           onChange={handleEmailChange}
-                           required
-                         />
-                      </div>
-                      {emailError && (
-                        <p className="text-[11px] font-bold text-red-500 flex items-start gap-1.5 mt-1 ml-1">
-                          <span className="shrink-0 mt-0.5">⚠</span>
-                          {emailError}
-                        </p>
-                      )}
-                   </div>
-                </div>
+        <CardContent className="p-6 md:p-8">
+          <form onSubmit={handleSignup} className="space-y-8">
+            {/* Section 1: Personal identity */}
+            <section className="space-y-5">
+              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Personal identity
+              </h2>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                     <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Admission Number / Matric</Label>
-                     <div className="relative">
-                        <Fingerprint className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground" />
-                        <Input type="text" placeholder="UNI/2024/001" className="pl-12 h-12 rounded-xl focus-visible:ring-teal-600" value={form.matNo} onChange={(e) => setForm({...form, matNo: e.target.value})} required />
-                     </div>
-                  </div>
-                  <div className="space-y-2">
-                     <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Current Academic Level</Label>
-                     <div className="relative">
-                        <Layers className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground z-10" />
-                        <select 
-                          className="flex h-12 w-full rounded-xl border border-input bg-background pl-12 pr-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
-                          value={form.level} 
-                          onChange={(e) => setForm({...form, level: e.target.value})}
-                        >
-                           {['100L', '200L', '300L', '400L', '500L'].map(l => <option key={l} value={l}>{l}</option>)}
-                        </select>
-                     </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <Label htmlFor="name" className="text-sm font-medium text-foreground">Full legal name</Label>
+                  <div className="relative">
+                    <User size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input id="name" type="text" placeholder="e.g. Victor Adeleke" className="pl-11 h-11" value={form.name} onChange={(e) => setForm({...form, name: e.target.value})} required />
                   </div>
                 </div>
-             </div>
-
-             {/* Section 2: Academic Placement */}
-             <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                   <div className="h-1 w-8 bg-teal-600 rounded-full"></div>
-                   <h3 className="text-sm font-black uppercase tracking-widest text-teal-600">Institutional Placement</h3>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Assigned College / Faculty</Label>
-                    <div className="relative">
-                      <Building2 className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground z-10" />
-                      <select 
-                        className="flex h-12 w-full rounded-xl border border-input bg-background pl-12 pr-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2"
-                        value={form.college} 
-                        onChange={(e) => setForm({...form, college: e.target.value, program: ''})}
-                        required
-                      >
-                        <option value="">Select Primary College</option>
-                        {structure.colleges.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-                      </select>
-                    </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email" className="text-sm font-medium text-foreground">Matriculation email</Label>
+                  <div className="relative">
+                    <Mail size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="yourname@mtu.edu.ng"
+                      className={`pl-11 h-11 ${emailError ? 'border-destructive focus-visible:ring-destructive' : ''}`}
+                      value={form.email}
+                      onChange={handleEmailChange}
+                      required
+                    />
                   </div>
+                  {emailError && (
+                    <p className="text-xs leading-relaxed text-destructive flex items-start gap-1.5">
+                      <AlertCircle size={14} className="shrink-0 mt-0.5" strokeWidth={1.5} />
+                      <span>{emailError}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
 
-                  <div className="space-y-2">
-                    <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Proposed Program of Study</Label>
-                    <div className="relative">
-                      <GraduationCap className="absolute left-4 top-3.5 h-5 w-5 text-muted-foreground z-10" />
-                      <select 
-                        className="flex h-12 w-full rounded-xl border border-input bg-background pl-12 pr-3 py-2 text-sm font-bold ring-offset-background focus:outline-none focus:ring-2 focus:ring-teal-600 focus:ring-offset-2 disabled:opacity-30"
-                        value={form.program} 
-                        onChange={(e) => setForm({...form, program: e.target.value})}
-                        disabled={!form.college}
-                        required
-                      >
-                        <option value="">Select Major Program</option>
-                        {selectedCollege?.programs.map(p => <option key={p} value={p}>{p}</option>)}
-                      </select>
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="space-y-2">
+                  <Label htmlFor="matNo" className="text-sm font-medium text-foreground">Admission number / matric</Label>
+                  <div className="relative">
+                    <Fingerprint size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input id="matNo" type="text" placeholder="UNI/2024/001" className="pl-11 h-11" value={form.matNo} onChange={(e) => setForm({...form, matNo: e.target.value})} required />
                   </div>
                 </div>
-             </div>
+                <div className="space-y-2">
+                  <Label htmlFor="level" className="text-sm font-medium text-foreground">Current academic level</Label>
+                  <div className="relative">
+                    <Layers size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
+                    <select
+                      id="level"
+                      className={selectClass}
+                      value={form.level}
+                      onChange={(e) => setForm({...form, level: e.target.value})}
+                    >
+                      {['100L', '200L', '300L', '400L', '500L'].map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </section>
 
-             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border-l-4 border-teal-600 text-[10px] font-bold text-muted-foreground flex gap-3">
-                <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-teal-600" />
-                <p>ACADEMIC RECORD: Your initial portal password is set to your SURNAME in lowercase. Please update this upon first synchronization.</p>
-             </div>
+            {/* Section 2: Institutional placement */}
+            <section className="space-y-5">
+              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Institutional placement
+              </h2>
 
-             <Button type="submit" className="w-full h-16 bg-teal-600 hover:bg-teal-700 font-black text-xl shadow-2xl shadow-teal-600/30 rounded-2xl transition-all hover:scale-[1.01] active:scale-[0.98]">
-                Complete Enrollment <ArrowRight className="ml-2 h-5 w-5" />
-             </Button>
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="college" className="text-sm font-medium text-foreground">Assigned college / faculty</Label>
+                  <div className="relative">
+                    <Building2 size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
+                    <select
+                      id="college"
+                      className={selectClass}
+                      value={form.college}
+                      onChange={(e) => setForm({...form, college: e.target.value, program: ''})}
+                      required
+                    >
+                      <option value="">Select primary college</option>
+                      {structure.colleges.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="program" className="text-sm font-medium text-foreground">Proposed program of study</Label>
+                  <div className="relative">
+                    <GraduationCap size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground z-10" />
+                    <select
+                      id="program"
+                      className={selectClass}
+                      value={form.program}
+                      onChange={(e) => setForm({...form, program: e.target.value})}
+                      disabled={!form.college}
+                      required
+                    >
+                      <option value="">Select major program</option>
+                      {selectedCollege?.programs.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  {!form.college && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                      <BookOpen size={14} className="shrink-0 text-muted-foreground" strokeWidth={1.5} />
+                      <span>Select a college first to see available programs.</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <div className="flex gap-3 rounded-xl border border-border bg-muted p-4 text-sm leading-relaxed text-muted-foreground">
+              <ShieldCheck size={18} className="shrink-0 mt-0.5 text-brand-green" strokeWidth={1.5} />
+              <p>Your initial portal password is set to your surname in lowercase. Please update it after your first sign-in.</p>
+            </div>
+
+            <Button type="submit" className="w-full h-11 active:translate-y-px">
+              Complete enrollment
+              <ArrowRight size={18} />
+            </Button>
           </form>
         </CardContent>
 
-        <CardFooter className="px-10 py-8 bg-slate-50 dark:bg-slate-900 border-t flex flex-col gap-4 text-center">
-           <p className="text-xs font-bold text-muted-foreground">
-             By enrolling, you agree to the University Code of Scholarly Conduct.
-           </p>
-           <div className="flex items-center justify-center gap-2 text-xs">
-              <span className="text-slate-400 font-medium">Already have an active account?</span>
-              <Link href="/login" className="text-teal-600 font-black hover:underline underline-offset-4">Sign In Now</Link>
-           </div>
+        <CardFooter className="flex flex-col gap-3 border-t border-border px-6 py-6 md:px-8 text-center">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            By enrolling, you agree to the university code of scholarly conduct.
+          </p>
+          <div className="flex items-center justify-center gap-1.5 text-sm">
+            <span className="text-muted-foreground">Already have an account?</span>
+            <Link href="/login" className="font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline">
+              Sign in
+            </Link>
+          </div>
         </CardFooter>
       </Card>
-      
-      {/* Decorative Ornaments */}
-      <div className="absolute -top-12 -left-12 w-64 h-64 bg-teal-600/10 rounded-full blur-[100px] animate-pulse"></div>
-      <div className="absolute -bottom-12 -right-12 w-64 h-64 bg-blue-600/10 rounded-full blur-[100px] animate-pulse duration-1000"></div>
-    </div>
+    </main>
   );
 }

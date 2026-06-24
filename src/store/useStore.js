@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { semesterFromCode, nextSession } from '@/lib/utils';
 
 const ACADEMIC_STRUCTURE = {
   colleges: [
@@ -40,6 +41,21 @@ const MOCK_DB = {
   ]
 };
 
+// Monotonic counter so ids minted within the same millisecond never collide
+// (Date.now() alone can repeat across rapid successive calls).
+let _idCounter = 0;
+const nextId = () => `${Date.now()}-${(_idCounter = (_idCounter + 1) % 1000000)}`;
+
+// Fisher–Yates shuffle that returns a NEW array (never mutates the input).
+const shuffleArray = (arr = []) => {
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
+
 let bc;
 if (typeof window !== 'undefined') {
   bc = new BroadcastChannel('lms_notifications');
@@ -60,22 +76,57 @@ export const useStore = create(
         user: null,
         dynamicUsers: [],
         excludedIds: [],
+        notes: [], // personal notepad entries (per-user, see NOTEPAD ACTIONS)
         liveSessions: [],
         scheduledSessions: [], // Future engagements
+        sessionAttendance: [], // per video/voice session attendance records (see ATTENDANCE shape)
+        currentSession: '2025/2026',
+        currentSemester: '1st',
+        semesterOpen: true, // is the current semester open for registration?
+        sessionHistory: [],
         auditingUser: null,
         _hasHydrated: false,
         setHasHydrated: (val) => set({ _hasHydrated: val }),
+
+        // Fire-and-forget welcome email on account creation. SSR/non-browser
+        // safe (guards typeof window/fetch); never awaited; errors swallowed so
+        // it can NEVER block or change the signup/addUser return value.
+        _fireWelcomeEmail: ({ email, name, role } = {}) => {
+          if (typeof window === 'undefined' || typeof fetch !== 'function') return;
+          try {
+            fetch('/api/welcome', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, name, role }),
+            }).catch(() => { /* swallow */ });
+          } catch { /* swallow — never block account creation */ }
+        },
 
         // ─── FACULTY PORTAL GATE ───
         lecturerPortalActive: true,
         toggleLecturerPortal: () =>
           set((state) => ({ lecturerPortalActive: !state.lecturerPortalActive })),
 
+        // ─── LECTURER COURSE REGISTRATION ───
+        // Window set by admin; registrations keyed by lecturerId;
+        // overrides allow individual re-opens after deadline.
+        lecturerCourseRegWindow: {
+          open: false,           // is the window currently open?
+          startDate: null,       // ISO string
+          endDate: null,         // ISO string (deadline)
+          semester: null,        // '1st' | '2nd'
+          session: null,         // e.g. '2025/2026'
+        },
+        // { [lecturerId]: { courseIds: number[], submittedAt: ISO|null } }
+        lecturerCourseRegistrations: {},
+        // Set of lecturerId strings that have been individually re-opened by admin
+        lecturerRegOverrides: [],
+
         login: async (email, password) => {
           const allUsers = get().getAllUsers();
           const foundUser = allUsers.find(u => u.email === email && u.password === password);
           if (foundUser) {
-            if (foundUser.status === 'dormant') {
+            if (foundUser.status && foundUser.status !== 'active') {
               return { success: false, error: 'Your account is currently dormant/suspended. Please contact IT admin.' };
             }
             
@@ -98,24 +149,29 @@ export const useStore = create(
               else if (ua.includes("Edge")) browser = "Microsoft Edge";
             }
 
-            // Dispatch to real email API
-            if (typeof window !== 'undefined') {
-              fetch('/api/login-alert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  email: foundUser.email,
-                  name: foundUser.name,
-                  deviceType,
-                  browser,
-                  location,
-                  time: new Date().toLocaleString()
-                })
-              }).then(res => res.json()).then(data => {
-                if(data.previewUrl) {
-                  console.log("Email Sent! Preview it here:", data.previewUrl);
-                }
-              }).catch(err => console.error("Failed to send security email:", err));
+            // Dispatch to real email API — fire-and-forget, never blocks auth.
+            // Sends the spec contract { email, name, role } plus the device
+            // context the login-alert route renders into the email body.
+            if (typeof window !== 'undefined' && typeof fetch === 'function') {
+              try {
+                fetch('/api/login-alert', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    email: foundUser.email,
+                    name: foundUser.name,
+                    role: foundUser.role,
+                    deviceType,
+                    browser,
+                    location,
+                    time: new Date().toLocaleString()
+                  })
+                }).then(res => res.json()).then(data => {
+                  if(data.previewUrl) {
+                    console.log("Email Sent! Preview it here:", data.previewUrl);
+                  }
+                }).catch(err => console.error("Failed to send security email:", err));
+              } catch { /* swallow — auth must never fail on email dispatch */ }
             }
 
             set(state => ({ 
@@ -174,6 +230,16 @@ export const useStore = create(
             dynamicUsers: [...state.dynamicUsers, newUser],
             user: newUser
           }));
+
+          // Fire-and-forget side effects — must NOT block or change the return.
+          get()._fireWelcomeEmail({ email: newUser.email, name: newUser.name, role: newUser.role });
+          get().pushNotification({
+            target: 'admin',
+            type: 'system',
+            text: `New ${newUser.role} account created: ${newUser.name}`,
+            link: '/admin',
+          });
+
           return { success: true, role: newUser.role };
         },
 
@@ -302,13 +368,18 @@ export const useStore = create(
           { id: 1, title: 'PHY104 Final Exam', date: new Date(Date.now() + 86400000 * 2).toISOString() }
         ],
 
-        // Materials uploaded by lecturers
+        // Materials uploaded by lecturers.
+        // New shape: { id, courseId, lecturerId, title, description, week, type
+        //   ('note'|'slide'|'assignment'|'reference'|'video'|'other'), url,
+        //   fileData, fileName, fileSize (bytes), visible, createdAt(ISO) }.
+        // Legacy aliases (uploadedBy, size, date, and the old `type` value) are
+        // kept on each record so existing pages keep rendering unchanged.
         materials: [
-          { id: 1, courseId: 1, title: 'Introduction to Mechanics', type: 'pdf', url: '#', size: '2.4 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-10' },
-          { id: 2, courseId: 1, title: 'Wave Theory Lecture Notes', type: 'pdf', url: '#', size: '1.8 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-12' },
-          { id: 3, courseId: 2, title: 'HTML5 Fundamentals', type: 'pdf', url: '#', size: '3.1 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-08' },
-          { id: 4, courseId: 2, title: 'CSS Grid & Flexbox Video', type: 'video', url: '#', size: '120 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-14' },
-          { id: 5, courseId: 3, title: 'Academic Writing Guide', type: 'pdf', url: '#', size: '1.2 MB', uploadedBy: 'LEC/2024/001', date: '2026-04-09' },
+          { id: 1, courseId: 1, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'Introduction to Mechanics', description: '', week: 'Week 1', type: 'note', url: '#', fileData: null, fileName: null, fileSize: null, size: '2.4 MB', visible: true, createdAt: '2026-04-10T09:00:00.000Z', date: '2026-04-10' },
+          { id: 2, courseId: 1, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'Wave Theory Lecture Notes', description: '', week: 'Week 3', type: 'note', url: '#', fileData: null, fileName: null, fileSize: null, size: '1.8 MB', visible: true, createdAt: '2026-04-12T09:00:00.000Z', date: '2026-04-12' },
+          { id: 3, courseId: 2, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'HTML5 Fundamentals', description: '', week: 'Week 1', type: 'slide', url: '#', fileData: null, fileName: null, fileSize: null, size: '3.1 MB', visible: true, createdAt: '2026-04-08T09:00:00.000Z', date: '2026-04-08' },
+          { id: 4, courseId: 2, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'CSS Grid & Flexbox Video', description: '', week: 'Week 2', type: 'video', url: '#', fileData: null, fileName: null, fileSize: null, size: '120 MB', visible: true, createdAt: '2026-04-14T09:00:00.000Z', date: '2026-04-14' },
+          { id: 5, courseId: 3, lecturerId: 'LEC/2024/001', uploadedBy: 'LEC/2024/001', title: 'Academic Writing Guide', description: '', week: 'Week 1', type: 'reference', url: '#', fileData: null, fileName: null, fileSize: null, size: '1.2 MB', visible: true, createdAt: '2026-04-09T09:00:00.000Z', date: '2026-04-09' },
         ],
 
         // Library / textbooks per course
@@ -321,54 +392,90 @@ export const useStore = create(
           { id: 6, courseId: 5, title: 'Electric Circuits', author: 'Nilsson & Riedel', edition: '11th Ed', type: 'textbook', url: '#' },
         ],
 
-        // Assignments
+        // Assignments — rich model (see ASSIGNMENT shape). Seed assignments are
+        // normalized to the new shape: each carries instructions/startAt/dueDate/
+        // totalMarks/allowedFormats/status('draft'|'active'|'closed')/extensions.
+        // Legacy fields kept for backward-compatible UI: `description` (alias of
+        // `instructions`), `maxScore` (alias of `totalMarks`), and `createdBy`
+        // (alias of `lecturerId`). Existing pages read these unchanged.
         assignments: [
-          { id: 1, courseId: 1, title: 'Newton\'s Laws Problem Set', description: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', dueDate: new Date(Date.now() + 86400000 * 3).toISOString(), maxScore: 50, createdBy: 'lecturer-1', status: 'active' },
-          { id: 2, courseId: 2, title: 'Build a Responsive Webpage', description: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', dueDate: new Date(Date.now() + 86400000 * 7).toISOString(), maxScore: 100, createdBy: 'lecturer-2', status: 'active' },
-          { id: 3, courseId: 3, title: 'Essay: Academic Communication', description: 'Write a 500-word essay on the importance of academic integrity in university education.', dueDate: new Date(Date.now() - 86400000 * 1).toISOString(), maxScore: 50, createdBy: 'lecturer-1', status: 'closed' },
-          { id: 4, courseId: 5, title: 'Circuit Analysis Report', description: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', dueDate: new Date(Date.now() + 86400000 * 5).toISOString(), maxScore: 75, createdBy: 'lecturer-1', status: 'active' },
+          { id: 1, courseId: 1, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Newton\'s Laws Problem Set', instructions: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', description: 'Solve the 10 problems on Newton\'s laws of motion provided in the course materials. Show all workings.', startAt: new Date(Date.now() - 86400000 * 2).toISOString(), dueDate: new Date(Date.now() + 86400000 * 3).toISOString(), totalMarks: 50, maxScore: 50, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'active', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
+          { id: 2, courseId: 2, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Build a Responsive Webpage', instructions: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', description: 'Create a fully responsive personal portfolio webpage using HTML, CSS (Flexbox/Grid), and basic JavaScript interactivity.', startAt: new Date(Date.now() - 86400000 * 2).toISOString(), dueDate: new Date(Date.now() + 86400000 * 7).toISOString(), totalMarks: 100, maxScore: 100, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'active', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
+          { id: 3, courseId: 3, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Essay: Academic Communication', instructions: 'Write a 500-word essay on the importance of academic integrity in university education.', description: 'Write a 500-word essay on the importance of academic integrity in university education.', startAt: new Date(Date.now() - 86400000 * 10).toISOString(), dueDate: new Date(Date.now() - 86400000 * 1).toISOString(), totalMarks: 50, maxScore: 50, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'closed', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 10).toISOString() },
+          { id: 4, courseId: 1, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001', title: 'Circuit Analysis Report', instructions: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', description: 'Analyze the given electric circuit and determine voltage drops, current flows, and power dissipation at each element.', startAt: new Date(Date.now() - 86400000 * 2).toISOString(), dueDate: new Date(Date.now() + 86400000 * 5).toISOString(), totalMarks: 75, maxScore: 75, allowedFormats: ['pdf', 'docx'], maxFileSizeMB: 10, attachment: null, rubric: null, rubricVisible: false, status: 'active', extensions: {}, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
         ],
 
-        // Student submissions
+        // Student submissions — rich model. New canonical fields: answerText,
+        // file ({name,data,size}|null), status ('submitted'|'graded'). Legacy
+        // aliases kept for current UI: `content` (alias of answerText) and
+        // `attachment` (alias of file).
         submissions: [
-          { id: 1, assignmentId: 3, studentId: 'student-1', studentName: 'Victor Adeleke', content: 'Academic integrity is the foundation of learning...', submittedAt: new Date(Date.now() - 86400000 * 2).toISOString(), score: null, feedback: '' },
+          { id: 1, assignmentId: 3, studentId: 'student-1', studentName: 'Victor Adeleke', answerText: 'Academic integrity is the foundation of learning...', content: 'Academic integrity is the foundation of learning...', file: null, attachment: null, submittedAt: new Date(Date.now() - 86400000 * 2).toISOString(), score: null, feedback: '', status: 'submitted' },
         ],
 
-        // Quizzes
+        // Quizzes — rich model (see QUIZ shape). Seed quizzes are normalized to
+        // the new shape: each question carries type/text/options/correct/marks,
+        // `correct` for mcq is the option index, totalMarks = sum of question marks.
+        // Legacy fields kept for backward-compatible UI: `description` (alias of
+        // `instructions`), `createdBy` (alias of `lecturerId`), and each question
+        // still exposes `question` alongside the canonical `text`.
         quizzes: [
           {
-            id: 1, courseId: 1, title: 'PHY104 Week 3 Quiz', description: 'Test your understanding of Newton\'s Laws',
-            createdBy: 'lecturer-1', status: 'active', timeLimit: 15,
+            id: 1, courseId: 1, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001',
+            title: 'PHY104 Week 3 Quiz',
+            instructions: 'Test your understanding of Newton\'s Laws', description: 'Test your understanding of Newton\'s Laws',
+            startAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+            endAt: new Date(Date.now() + 86400000 * 14).toISOString(),
+            timeLimit: 15, totalMarks: 5, attemptsAllowed: 1,
+            shuffleQuestions: false, shuffleOptions: false, displayMode: 'all',
+            status: 'published', createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
             questions: [
-              { id: 1, type: 'mcq', question: 'Which of Newton\'s laws states that every action has an equal and opposite reaction?', options: ['First Law', 'Second Law', 'Third Law', 'Law of Gravitation'], correct: 2 },
-              { id: 2, type: 'mcq', question: 'What is the SI unit of force?', options: ['Joule', 'Newton', 'Watt', 'Pascal'], correct: 1 },
-              { id: 3, type: 'mcq', question: 'F = ma represents Newton\'s _____ Law', options: ['First', 'Second', 'Third', 'Fourth'], correct: 1 },
-              { id: 4, type: 'mcq', question: 'A body at rest tends to stay at rest. This is known as?', options: ['Inertia', 'Momentum', 'Velocity', 'Acceleration'], correct: 0 },
-              { id: 5, type: 'mcq', question: 'Which quantity is a vector?', options: ['Mass', 'Speed', 'Time', 'Velocity'], correct: 3 },
+              { id: 1, type: 'mcq', text: 'Which of Newton\'s laws states that every action has an equal and opposite reaction?', question: 'Which of Newton\'s laws states that every action has an equal and opposite reaction?', options: ['First Law', 'Second Law', 'Third Law', 'Law of Gravitation'], correct: 2, marks: 1 },
+              { id: 2, type: 'mcq', text: 'What is the SI unit of force?', question: 'What is the SI unit of force?', options: ['Joule', 'Newton', 'Watt', 'Pascal'], correct: 1, marks: 1 },
+              { id: 3, type: 'mcq', text: 'F = ma represents Newton\'s _____ Law', question: 'F = ma represents Newton\'s _____ Law', options: ['First', 'Second', 'Third', 'Fourth'], correct: 1, marks: 1 },
+              { id: 4, type: 'mcq', text: 'A body at rest tends to stay at rest. This is known as?', question: 'A body at rest tends to stay at rest. This is known as?', options: ['Inertia', 'Momentum', 'Velocity', 'Acceleration'], correct: 0, marks: 1 },
+              { id: 5, type: 'mcq', text: 'Which quantity is a vector?', question: 'Which quantity is a vector?', options: ['Mass', 'Speed', 'Time', 'Velocity'], correct: 3, marks: 1 },
             ]
           },
           {
-            id: 2, courseId: 2, title: 'ICT102 HTML/CSS Quiz', description: 'Basic web technologies assessment',
-            createdBy: 'lecturer-2', status: 'active', timeLimit: 20,
+            id: 2, courseId: 2, lecturerId: 'LEC/2024/001', createdBy: 'LEC/2024/001',
+            title: 'ICT102 HTML/CSS Quiz',
+            instructions: 'Basic web technologies assessment', description: 'Basic web technologies assessment',
+            startAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+            endAt: new Date(Date.now() + 86400000 * 14).toISOString(),
+            timeLimit: 20, totalMarks: 5, attemptsAllowed: 1,
+            shuffleQuestions: false, shuffleOptions: false, displayMode: 'all',
+            status: 'published', createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
             questions: [
-              { id: 1, type: 'mcq', question: 'What does HTML stand for?', options: ['HyperText Markup Language', 'High Text Machine Language', 'HyperText Machine Language', 'HyperTool Mark Language'], correct: 0 },
-              { id: 2, type: 'mcq', question: 'Which CSS property is used for text color?', options: ['font-color', 'text-color', 'color', 'foreground'], correct: 2 },
-              { id: 3, type: 'mcq', question: 'Which HTML tag is used for the largest heading?', options: ['<h6>', '<heading>', '<h1>', '<head>'], correct: 2 },
-              { id: 4, type: 'mcq', question: 'Which property makes a flexbox container?', options: ['display: flex', 'flex: row', 'position: flex', 'layout: flex'], correct: 0 },
-              { id: 5, type: 'mcq', question: 'CSS stands for?', options: ['Creative Style Sheets', 'Cascading Style Sheets', 'Computer Style Sheets', 'Colorful Style Sheets'], correct: 1 },
+              { id: 1, type: 'mcq', text: 'What does HTML stand for?', question: 'What does HTML stand for?', options: ['HyperText Markup Language', 'High Text Machine Language', 'HyperText Machine Language', 'HyperTool Mark Language'], correct: 0, marks: 1 },
+              { id: 2, type: 'mcq', text: 'Which CSS property is used for text color?', question: 'Which CSS property is used for text color?', options: ['font-color', 'text-color', 'color', 'foreground'], correct: 2, marks: 1 },
+              { id: 3, type: 'mcq', text: 'Which HTML tag is used for the largest heading?', question: 'Which HTML tag is used for the largest heading?', options: ['<h6>', '<heading>', '<h1>', '<head>'], correct: 2, marks: 1 },
+              { id: 4, type: 'mcq', text: 'Which property makes a flexbox container?', question: 'Which property makes a flexbox container?', options: ['display: flex', 'flex: row', 'position: flex', 'layout: flex'], correct: 0, marks: 1 },
+              { id: 5, type: 'mcq', text: 'CSS stands for?', question: 'CSS stands for?', options: ['Creative Style Sheets', 'Cascading Style Sheets', 'Computer Style Sheets', 'Colorful Style Sheets'], correct: 1, marks: 1 },
             ]
           },
         ],
 
-        // Quiz results per student
+        // Quiz results per student (legacy simple model — kept for old UI)
         quizResults: [],
 
-        // Past questions
+        // Rich quiz attempts (see ATTEMPT shape)
+        quizAttempts: [],
+
+        // Past questions — CROSS-DEPARTMENT (not registration-gated). New shape:
+        // { id, courseCode, courseTitle, year, semester ('1st'|'2nd'),
+        //   examType ('mid'|'final'), url, fileData, fileName, fileSize,
+        //   answerSchemeUrl, answerSchemeData, answerSchemeName,
+        //   answerSchemeVisible(bool, default false), uploadedBy, uploaderName,
+        //   uploaderRole, visible(bool, default true), createdAt(ISO) }.
+        // Seeded with EXTERNAL url placeholders (never large base64). The legacy
+        // `questions: []` / `type` / `semester` fields are retained as harmless
+        // aliases so any older list UI does not crash on the new records.
         pastQuestions: [
-          { id: 1, courseId: 1, year: '2024/2025', semester: 'First', type: 'Theory', questions: ['Define Newton\'s first law of motion and give two examples.', 'A car of mass 1200kg accelerates at 3m/s². Calculate the force applied.', 'Distinguish between scalar and vector quantities with examples.', 'State and explain the principle of conservation of momentum.', 'A ball is thrown vertically upward with velocity 20m/s. Find the maximum height reached. (g = 10m/s²)'] },
-          { id: 2, courseId: 1, year: '2023/2024', semester: 'Second', type: 'Theory', questions: ['What is the difference between mass and weight?', 'Explain uniform circular motion with a real-life example.', 'State Hooke\'s Law. What is the spring constant?', 'Describe simple harmonic motion. Give two examples.', 'Calculate the work done when a force of 50N moves an object 10m.'] },
-          { id: 3, courseId: 2, year: '2024/2025', semester: 'First', type: 'Practical', questions: ['Build a complete HTML form with validation using JavaScript.', 'Demonstrate the difference between inline and block elements.', 'Create a responsive 3-column layout using CSS Grid.', 'Write JavaScript to fetch data from an API and display it.', 'Style a navigation bar using Flexbox.'] },
-          { id: 4, courseId: 3, year: '2024/2025', semester: 'First', type: 'Theory', questions: ['What is academic writing? List its key features.', 'Explain the difference between denotation and connotation.', 'Write a formal letter to your HOD requesting an extension.', 'What is plagiarism? How can it be avoided?', 'Define register. Give examples of formal and informal register.'] },
+          { id: 1, courseCode: 'PHY104', courseTitle: 'Practical Physics II', year: '2024/2025', semester: '1st', examType: 'final', url: 'https://drive.google.com/file/d/EXAMPLE_PHY104_FINAL/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: '', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: false, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-01T09:00:00.000Z', type: 'Theory', questions: [] },
+          { id: 2, courseCode: 'CSC101', courseTitle: 'Introduction to Computer Science', year: '2023/2024', semester: '2nd', examType: 'final', url: 'https://drive.google.com/file/d/EXAMPLE_CSC101_FINAL/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: 'https://drive.google.com/file/d/EXAMPLE_CSC101_SCHEME/view', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: true, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-02T09:00:00.000Z', type: 'Theory', questions: [] },
+          { id: 3, courseCode: 'MTH101', courseTitle: 'Elementary Mathematics II', year: '2024/2025', semester: '1st', examType: 'mid', url: 'https://drive.google.com/file/d/EXAMPLE_MTH101_MID/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: '', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: false, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-03T09:00:00.000Z', type: 'Theory', questions: [] },
+          { id: 4, courseCode: 'GST111', courseTitle: 'Communication in English I', year: '2022/2023', semester: '1st', examType: 'final', url: 'https://drive.google.com/file/d/EXAMPLE_GST111_FINAL/view', fileData: null, fileName: null, fileSize: null, answerSchemeUrl: '', answerSchemeData: null, answerSchemeName: null, answerSchemeVisible: false, uploadedBy: 'admin-1', uploaderName: 'IT Administration', uploaderRole: 'admin', visible: true, createdAt: '2025-09-04T09:00:00.000Z', type: 'Theory', questions: [] },
         ],
 
         // Direct messages between users
@@ -379,7 +486,7 @@ export const useStore = create(
 
         // Lecturer ratings from students
         lecturerRatings: [
-          { id: 1, lecturerId: 'lecturer-1', studentId: 'student-1', courseId: 1, rating: 4, comment: 'Very clear explanations. Would appreciate more practical examples.', date: '2026-04-10' },
+          { id: 1, lecturerId: 'LEC/2024/001', studentId: 'student-1', courseId: 1, rating: 4, comment: 'Very clear explanations. Would appreciate more practical examples.', date: '2026-04-10' },
         ],
 
         // Broadcast announcements
@@ -407,6 +514,180 @@ export const useStore = create(
           }));
         },
 
+        // ─── RICH NOTIFICATION INFRASTRUCTURE ───
+        // The single helper every future feature should call to notify users.
+        // Prepends a per-recipient notification onto the shared `notifications`
+        // array. Backward compatible: existing notifications (no recipientId /
+        // no target) remain visible to everyone via getMyNotifications().
+        // Returns the created notification.
+        pushNotification: ({ recipientId, target, type, text, link, isUrgent } = {}) => {
+          const newNotif = {
+            id: nextId(),
+            recipientId: recipientId ?? null,
+            target: target ?? null, // 'all' | 'student' | 'lecturer' | 'admin'
+            type: type ?? 'system',
+            text: text ?? '',
+            link: link ?? null,
+            time: new Date().toISOString(),
+            read: false,
+            isUrgent: !!isUrgent,
+          };
+          set((state) => ({
+            notifications: [newNotif, ...state.notifications],
+            activeToast: newNotif,
+          }));
+          return newNotif;
+        },
+
+        // Internal predicate: is a notification relevant to the given user?
+        // Honors both the new `recipientId` and the legacy `targetUserId` field
+        // used by existing producers (private call invites, etc.).
+        _isNotifForUser: (n, user) => {
+          if (!user) return false;
+          const recip = n.recipientId ?? n.targetUserId ?? null;
+          if (recip && recip !== user.id) return false;
+          const tgt = n.target ?? null;
+          if (tgt && tgt !== 'all' && tgt !== user.role) return false;
+          const muted = user.mutedNotificationTypes || [];
+          if (n.type && muted.includes(n.type)) return false;
+          return true;
+        },
+
+        // Notifications relevant to the CURRENT user, newest first. Legacy
+        // notifications with no recipientId/target stay visible to everyone.
+        getMyNotifications: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return [];
+          const relevant = state.notifications.filter((n) => state._isNotifForUser(n, user));
+          // Newest first. New notifs carry ISO `time`; legacy ones may carry a
+          // human string ("1 hr ago") or a numeric id — fall back to id order.
+          return [...relevant].sort((a, b) => {
+            const ta = Date.parse(a.time);
+            const tb = Date.parse(b.time);
+            if (!Number.isNaN(ta) && !Number.isNaN(tb)) return tb - ta;
+            return 0; // preserve existing (already newest-first) order otherwise
+          });
+        },
+
+        // Mark ALL of the current user's relevant notifications read.
+        markAllNotificationsRead: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return;
+          set((s) => ({
+            notifications: s.notifications.map((n) =>
+              s._isNotifForUser(n, user) ? { ...n, read: true } : n
+            ),
+          }));
+        },
+
+        // Remove a single notification by id (only if relevant to current user).
+        clearNotification: (id) => {
+          const state = get();
+          const user = state.user;
+          set((s) => ({
+            notifications: s.notifications.filter((n) => {
+              if (n.id !== id) return true;
+              // only the owner (or, for unscoped legacy notifs, anyone) may clear
+              return user ? !s._isNotifForUser(n, user) : false;
+            }),
+          }));
+        },
+
+        // Remove ALL of the current user's relevant notifications.
+        clearAllNotifications: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return;
+          set((s) => ({
+            notifications: s.notifications.filter((n) => !s._isNotifForUser(n, user)),
+          }));
+        },
+
+        // ─── PER-USER NOTIFICATION MUTE PREFERENCES ───
+        // Toggle a notification `type` in the current user's muted list. Stored
+        // on the user record (dynamicUsers + active user) so it persists and
+        // getMyNotifications can exclude muted types.
+        toggleNotificationType: (type) => {
+          const state = get();
+          const user = state.user;
+          if (!user || !type) return;
+          const apply = (u) => {
+            if (!u || u.id !== user.id) return u;
+            const muted = u.mutedNotificationTypes || [];
+            const next = muted.includes(type)
+              ? muted.filter((t) => t !== type)
+              : [...muted, type];
+            return { ...u, mutedNotificationTypes: next };
+          };
+          set((s) => ({
+            dynamicUsers: s.dynamicUsers.map(apply),
+            user: apply(s.user),
+          }));
+        },
+
+        // ─── NOTEPAD ACTIONS (scoped to current logged-in user) ───
+        // Each note: { id, ownerId, title, body, courseTag?, pinned, createdAt, updatedAt }
+        addNote: (partial = {}) => {
+          const user = get().user;
+          if (!user) return null;
+          const now = new Date().toISOString();
+          const newNote = {
+            id: nextId(),
+            ownerId: user.id,
+            title: partial.title ?? '',
+            body: partial.body ?? '',
+            courseTag: partial.courseTag ?? null,
+            pinned: partial.pinned ?? false,
+            createdAt: now,
+            updatedAt: now,
+          };
+          set((state) => ({ notes: [newNote, ...state.notes] }));
+          return newNote;
+        },
+        updateNote: (id, patch = {}) => {
+          const user = get().user;
+          if (!user) return;
+          set((state) => ({
+            notes: state.notes.map((n) =>
+              n.id === id && n.ownerId === user.id
+                ? { ...n, ...patch, id: n.id, ownerId: n.ownerId, createdAt: n.createdAt, updatedAt: new Date().toISOString() }
+                : n
+            ),
+          }));
+        },
+        deleteNote: (id) => {
+          const user = get().user;
+          if (!user) return;
+          set((state) => ({
+            notes: state.notes.filter((n) => !(n.id === id && n.ownerId === user.id)),
+          }));
+        },
+        togglePinNote: (id) => {
+          const user = get().user;
+          if (!user) return;
+          set((state) => ({
+            notes: state.notes.map((n) =>
+              n.id === id && n.ownerId === user.id
+                ? { ...n, pinned: !n.pinned, updatedAt: new Date().toISOString() }
+                : n
+            ),
+          }));
+        },
+        // Current user's notes: pinned first, then most-recently-updated.
+        getMyNotes: () => {
+          const state = get();
+          const user = state.user;
+          if (!user) return [];
+          return state.notes
+            .filter((n) => n.ownerId === user.id)
+            .sort((a, b) => {
+              if (!!b.pinned !== !!a.pinned) return b.pinned ? 1 : -1;
+              return new Date(b.updatedAt) - new Date(a.updatedAt);
+            });
+        },
+
         // ─── COURSE ACTIONS ───
         saveCourseNote: (courseId, text) => set((state) => ({
           courses: state.courses.map(c => c.id === courseId ? { ...c, note: text } : c)
@@ -419,25 +700,122 @@ export const useStore = create(
         })),
 
         // ─── MATERIAL ACTIONS ───
-        addMaterial: (material) => {
-          const { user, courses, broadcastAlert } = get();
-          const newMaterial = { 
-            ...material, 
-            id: Date.now(), 
-            date: new Date().toISOString().split('T')[0] 
-          };
-          
-          set((state) => ({
-            materials: [...state.materials, newMaterial]
-          }));
-
-          // Notify students of the new material
-          const course = courses.find(c => c.id === material.courseId);
-          broadcastAlert(`New material uploaded for ${course?.code || 'your course'}: ${material.title}`, false);
+        // Allowed material types in the new model. Unknown values fall back to
+        // 'other' (legacy values like 'pdf'/'slides'/'document'/'link' map below).
+        _MATERIAL_TYPES: ['note', 'slide', 'assignment', 'reference', 'video', 'other'],
+        _normalizeMaterialType: (t) => {
+          const map = { pdf: 'note', document: 'note', slides: 'slide', slide: 'slide', link: 'reference', note: 'note', assignment: 'assignment', reference: 'reference', video: 'video', other: 'other' };
+          return map[t] || 'other';
         },
-        deleteMaterial: (id) => set((state) => ({
-          materials: state.materials.filter(m => m.id !== id)
-        })),
+
+        // Add a material owned by the CURRENT lecturer. Accepts an external `url`
+        // OR a small base64 `fileData`. Stamps lecturerId from the signed-in user
+        // and notifies students. Legacy aliases (uploadedBy/size/date) are kept so
+        // existing pages keep rendering.
+        addMaterial: (data = {}) => {
+          const state = get();
+          const { user, courses } = state;
+          const nowISO = new Date().toISOString();
+          const type = state._normalizeMaterialType(data.type);
+          const fileSize = Number.isFinite(data.fileSize) ? data.fileSize : (parseInt(data.fileSize, 10) || null);
+          const newMaterial = {
+            id: nextId(),
+            courseId: typeof data.courseId === 'string' ? (parseInt(data.courseId, 10) || data.courseId) : data.courseId,
+            lecturerId: user?.id ?? data.lecturerId ?? null,
+            uploadedBy: user?.id ?? data.lecturerId ?? null, // legacy alias
+            title: data.title ?? '',
+            description: data.description ?? '',
+            week: data.week ?? '',
+            type,
+            url: data.url ?? null,
+            fileData: data.fileData ?? null,
+            fileName: data.fileName ?? null,
+            fileSize,
+            visible: data.visible ?? true,
+            createdAt: nowISO,
+            // legacy aliases retained for current Library / Materials pages
+            size: data.size ?? (fileSize ? `${(fileSize / (1024 * 1024)).toFixed(2)} MB` : ''),
+            date: nowISO.split('T')[0],
+          };
+
+          set((s) => ({ materials: [...s.materials, newMaterial] }));
+
+          const course = courses.find(c => c.id === newMaterial.courseId);
+          const courseCode = course?.code || 'your course';
+          state.pushNotification({
+            target: 'student',
+            type: 'material',
+            text: `New material "${newMaterial.title}" for ${courseCode}`,
+            link: '/dashboard/library',
+          });
+          return newMaterial;
+        },
+
+        // Patch a material (owner only). Re-derives the `size` legacy alias when
+        // fileSize changes; keeps the type normalized.
+        updateMaterial: (id, patch = {}) => {
+          const state = get();
+          const mat = state.materials.find(m => m.id === id);
+          if (!mat) return null;
+          const owner = mat.lecturerId ?? mat.uploadedBy;
+          if (owner && state.user && owner !== state.user.id) return null;
+          const next = { ...patch };
+          if (next.type !== undefined) next.type = state._normalizeMaterialType(next.type);
+          if (next.fileSize !== undefined) {
+            next.fileSize = Number.isFinite(next.fileSize) ? next.fileSize : (parseInt(next.fileSize, 10) || null);
+            if (next.size === undefined) next.size = next.fileSize ? `${(next.fileSize / (1024 * 1024)).toFixed(2)} MB` : '';
+          }
+          let updated = null;
+          set((s) => ({
+            materials: s.materials.map(m => {
+              if (m.id !== id) return m;
+              updated = { ...m, ...next, id: m.id, lecturerId: m.lecturerId, uploadedBy: m.uploadedBy, createdAt: m.createdAt };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        deleteMaterial: (id) => {
+          const state = get();
+          const mat = state.materials.find(m => m.id === id);
+          if (!mat) return;
+          const owner = mat.lecturerId ?? mat.uploadedBy;
+          if (owner && state.user && owner !== state.user.id) return;
+          set((s) => ({ materials: s.materials.filter(m => m.id !== id) }));
+        },
+
+        toggleMaterialVisibility: (id) => {
+          const state = get();
+          const mat = state.materials.find(m => m.id === id);
+          if (!mat) return;
+          const owner = mat.lecturerId ?? mat.uploadedBy;
+          if (owner && state.user && owner !== state.user.id) return;
+          set((s) => ({
+            materials: s.materials.map(m =>
+              m.id === id ? { ...m, visible: m.visible === false ? true : false } : m
+            ),
+          }));
+        },
+
+        // All materials for a course. Hidden (visible === false) are filtered out
+        // unless includeHidden is true (lecturer/admin views).
+        getCourseMaterials: (courseId, includeHidden = false) => {
+          const state = get();
+          return state.materials.filter(m =>
+            String(m.courseId) === String(courseId) && (includeHidden || m.visible !== false)
+          );
+        },
+
+        // Total bytes of a lecturer's materials that carry inline base64 fileData.
+        getLecturerStorageUsage: (lecturerId) => {
+          const state = get();
+          return state.materials.reduce((sum, m) => {
+            const owner = m.lecturerId ?? m.uploadedBy;
+            if (owner !== lecturerId || !m.fileData) return sum;
+            return sum + (Number.isFinite(m.fileSize) ? m.fileSize : 0);
+          }, 0);
+        },
 
         // ─── LIVE CLASSROOM ACTIONS ───
         liveSessions: [],
@@ -447,16 +825,30 @@ export const useStore = create(
           const targetCourse = get().courses.find(c => c.id === courseId);
           if (!targetCourse) return null;
           
-          const lecturer = get().getAllUsers().find(u => u.id === targetCourse.lecturerId);
+          const lecturer = get().getCourseAssignedLecturer(courseId);
           const sessionId = targetCourse.code + '-' + Date.now();
-          
+
+          const startISO = new Date().toISOString();
+          // Default a live session to a 2-hour window unless an explicit
+          // durationMinutes/endAt is provided. endAt drives getSessionStatus.
+          const durationMin = Number.isFinite(settings.durationMinutes)
+            ? settings.durationMinutes
+            : (parseInt(settings.durationMinutes, 10) || 120);
+          const endISO = settings.endAt ?? new Date(Date.now() + durationMin * 60000).toISOString();
+
           const newSession = {
             id: sessionId,
             courseId: courseId,
             title: targetCourse.title,
             lecturerName: lecturer?.name || 'Academic Lead',
-            lecturerId: targetCourse.lecturerId,
-            startTime: new Date().toISOString(),
+            lecturerId: lecturer?.id,
+            startTime: startISO,
+            // ─ video-session model ─
+            sessionType: settings.sessionType === 'voice' ? 'voice' : 'video',
+            startAt: startISO,
+            endAt: endISO,
+            recording: settings.recordLocally ?? settings.recording ?? false,
+            status: 'live',
             settings: {
               muteOnEntry: settings.muteOnEntry ?? true,
               waitingRoom: settings.waitingRoom ?? false,
@@ -486,9 +878,9 @@ export const useStore = create(
           return sessionId;
         },
         startPrivateCall: (courseId, studentId, studentName) => {
-          const { courses, getAllUsers } = get();
+          const { courses, getCourseAssignedLecturer } = get();
           const targetCourse = courses.find(c => c.id === courseId);
-          const lecturer = getAllUsers().find(u => u.id === targetCourse.lecturerId);
+          const lecturer = getCourseAssignedLecturer(courseId);
           const sessionId = `PRIVATE-${studentId}-${Date.now()}`;
           
           const newSession = {
@@ -496,7 +888,7 @@ export const useStore = create(
             courseId,
             title: `Private Consultation: ${studentName}`,
             lecturerName: lecturer?.name,
-            lecturerId: targetCourse.lecturerId,
+            lecturerId: lecturer?.id,
             startTime: new Date().toISOString(),
             isPrivate: true,
             targetStudentId: studentId,
@@ -523,9 +915,11 @@ export const useStore = create(
         },
         joinLiveSession: (sessionId, userId, userName) => {
           set(state => ({
-            liveSessions: state.liveSessions.map(s => 
-              s.id === sessionId 
-                ? { ...s, participants: [...(s.participants || []), { id: userId, name: userName, role: 'Student', joinTime: new Date().toISOString() }] }
+            liveSessions: state.liveSessions.map(s =>
+              s.id === sessionId
+                ? (s.participants || []).some(p => p.id === userId)
+                  ? s
+                  : { ...s, participants: [...(s.participants || []), { id: userId, name: userName, role: 'Student', joinTime: new Date().toISOString() }] }
                 : s
             )
           }));
@@ -548,10 +942,12 @@ export const useStore = create(
           set(state => ({
             liveSessions: state.liveSessions.map(s => 
               s.id === sessionId 
-                ? { 
-                    ...s, 
+                ? {
+                    ...s,
                     waitingParticipants: (s.waitingParticipants || []).filter(p => p.userId !== userId),
-                    participants: [...(s.participants || []), { name: participant.name, id: userId, joinTime: new Date().toISOString() }]
+                    participants: (s.participants || []).some(p => p.id === userId)
+                      ? (s.participants || [])
+                      : [...(s.participants || []), { name: participant.name, id: userId, joinTime: new Date().toISOString() }]
                   }
                 : s
             )
@@ -567,18 +963,27 @@ export const useStore = create(
           }));
         },
         endLiveSession: (sessionId) => {
+          const nowISO = new Date().toISOString();
           const session = get().liveSessions.find(s => s.id === sessionId);
           if (session) {
             const logEntry = {
               ...session,
-              endTime: new Date().toISOString(),
+              status: 'ended',
+              endTime: nowISO,
+              endAt: session.endAt ?? nowISO,
               duration: Math.round((Date.now() - new Date(session.startTime).getTime()) / 60000) + 'm'
             };
             set(state => ({ callHistory: [logEntry, ...state.callHistory] }));
           }
+          // Close out any still-open attendance records for this session.
           set(state => ({
             liveSessions: state.liveSessions.filter(s => s.id !== sessionId),
-            sessionMessages: state.sessionMessages.filter(m => m.sessionId !== sessionId)
+            sessionMessages: state.sessionMessages.filter(m => m.sessionId !== sessionId),
+            sessionAttendance: state.sessionAttendance.map(a => {
+              if (a.sessionId !== sessionId || a.leaveTime) return a;
+              const durationSec = Math.max(0, Math.round((Date.parse(nowISO) - Date.parse(a.joinTime)) / 1000));
+              return { ...a, leaveTime: nowISO, durationSec };
+            }),
           }));
         },
         sendSessionMessage: (sessionId, content) => {
@@ -597,35 +1002,722 @@ export const useStore = create(
           }));
         },
 
-        // ─── ASSIGNMENT ACTIONS ───
-        addAssignment: (assignment) => set((state) => ({
-          assignments: [...state.assignments, { ...assignment, id: Date.now(), status: 'active' }]
-        })),
-        submitAssignment: (assignmentId, content) => {
-          const { user } = get();
+        // ─── VIDEO SESSION + ATTENDANCE ACTIONS ───
+        // Lifecycle of a session relative to now. A session is 'live' ONLY
+        // between startAt and endAt; before startAt it is 'upcoming', after
+        // endAt it is 'ended'. Falls back to startTime when startAt is absent
+        // (legacy live sessions), and treats a missing endAt as open-ended.
+        getSessionStatus: (session) => {
+          if (!session) return 'ended';
+          if (session.status === 'ended') return 'ended';
+          const now = Date.now();
+          const start = Date.parse(session.startAt ?? session.startTime ?? session.dateTime);
+          const end = Date.parse(session.endAt);
+          if (!Number.isNaN(start) && now < start) return 'upcoming';
+          if (!Number.isNaN(end) && now > end) return 'ended';
+          return 'live';
+        },
+
+        // Record (or update) a user's JOIN on a session. Idempotent per
+        // user/session: a second join updates the existing record rather than
+        // duplicating it. Marked 'present' if within 15 minutes of startAt,
+        // otherwise 'late'. Returns the attendance record.
+        recordAttendanceJoin: (sessionId, userObj = {}) => {
+          const state = get();
+          const userId = userObj.id ?? userObj.userId;
+          if (!sessionId || !userId) return null;
+
+          const session = state.liveSessions.find(s => s.id === sessionId)
+            || state.scheduledSessions.find(s => s.id === sessionId)
+            || state.callHistory.find(s => s.id === sessionId);
+          const startRef = Date.parse(session?.startAt ?? session?.startTime ?? session?.dateTime);
+          const joinISO = new Date().toISOString();
+          const lateThreshold = 15 * 60 * 1000; // 15 minutes
+          const status = (!Number.isNaN(startRef) && Date.now() - startRef > lateThreshold) ? 'late' : 'present';
+
+          const existing = state.sessionAttendance.find(
+            a => a.sessionId === sessionId && a.userId === userId
+          );
+
+          let record = null;
+          if (existing) {
+            // Re-join: reopen the record, keep the original join status/time.
+            set((s) => ({
+              sessionAttendance: s.sessionAttendance.map(a => {
+                if (a.sessionId !== sessionId || a.userId !== userId) return a;
+                record = { ...a, leaveTime: null, durationSec: a.durationSec ?? 0 };
+                return record;
+              }),
+            }));
+          } else {
+            record = {
+              sessionId,
+              userId,
+              name: userObj.name ?? '',
+              role: userObj.role ?? 'student',
+              joinTime: joinISO,
+              leaveTime: null,
+              durationSec: 0,
+              status,
+            };
+            set((s) => ({ sessionAttendance: [...s.sessionAttendance, record] }));
+          }
+          return record;
+        },
+
+        // Record a user's LEAVE on a session: set leaveTime and accumulate
+        // durationSec from joinTime. No-op if there is no open record.
+        recordAttendanceLeave: (sessionId, userId) => {
+          const state = get();
+          const existing = state.sessionAttendance.find(
+            a => a.sessionId === sessionId && a.userId === userId
+          );
+          if (!existing) return null;
+          const leaveISO = new Date().toISOString();
+          const durationSec = Math.max(
+            0,
+            Math.round((Date.parse(leaveISO) - Date.parse(existing.joinTime)) / 1000)
+          );
+          let record = null;
+          set((s) => ({
+            sessionAttendance: s.sessionAttendance.map(a => {
+              if (a.sessionId !== sessionId || a.userId !== userId) return a;
+              record = { ...a, leaveTime: leaveISO, durationSec };
+              return record;
+            }),
+          }));
+          return record;
+        },
+
+        // All attendance records for a session.
+        getSessionAttendance: (sessionId) =>
+          get().sessionAttendance.filter(a => a.sessionId === sessionId),
+
+        // Push a live session's end time out by `minutes` (lecturer control).
+        extendSessionEnd: (sessionId, minutes) => {
+          const add = (Number.isFinite(minutes) ? minutes : (parseInt(minutes, 10) || 0)) * 60000;
+          if (!add) return null;
+          let updated = null;
           set((state) => ({
-            submissions: [...state.submissions, {
-              id: Date.now(),
-              assignmentId,
-              studentId: user.id,
-              studentName: user.name,
-              content,
-              submittedAt: new Date().toISOString(),
-              score: null,
-              feedback: ''
-            }]
+            liveSessions: state.liveSessions.map(s => {
+              if (s.id !== sessionId) return s;
+              const base = Date.parse(s.endAt) || Date.now();
+              updated = { ...s, endAt: new Date(base + add).toISOString() };
+              return updated;
+            }),
+            scheduledSessions: state.scheduledSessions.map(s => {
+              if (s.id !== sessionId || !s.endAt) return s;
+              const base = Date.parse(s.endAt) || Date.now();
+              updated = { ...s, endAt: new Date(base + add).toISOString() };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        // ─── ASSIGNMENT ACTIONS (rich model) ───
+        // The effective due date for a student: their per-student extension if
+        // present, otherwise the assignment's dueDate. Returns ms epoch or NaN.
+        _effectiveDueMs: (assignment, studentId) => {
+          if (!assignment) return NaN;
+          const ext = assignment.extensions?.[studentId];
+          return Date.parse(ext || assignment.dueDate);
+        },
+
+        // Create a DRAFT assignment owned by the current user. Keeps both the
+        // canonical (instructions/totalMarks/lecturerId) and legacy
+        // (description/maxScore/createdBy) fields coherent so existing
+        // lecturer pages that pass {description, maxScore, createdBy} keep working.
+        addAssignment: (data = {}) => {
+          const { user } = get();
+          const id = Date.now();
+          const nowISO = new Date().toISOString();
+          const instructions = data.instructions ?? data.description ?? '';
+          const totalMarks = Number.isFinite(data.totalMarks)
+            ? data.totalMarks
+            : (parseInt(data.totalMarks ?? data.maxScore, 10) || 0);
+          const lecturerId = data.lecturerId ?? data.createdBy ?? user?.id ?? null;
+          const courseId = typeof data.courseId === 'string'
+            ? (parseInt(data.courseId, 10) || data.courseId)
+            : data.courseId;
+          const assignment = {
+            id,
+            courseId,
+            lecturerId,
+            createdBy: lecturerId, // legacy alias
+            title: data.title ?? '',
+            instructions,
+            description: instructions, // legacy alias
+            startAt: data.startAt ?? nowISO,
+            dueDate: data.dueDate ?? new Date(Date.now() + 86400000 * 7).toISOString(),
+            totalMarks,
+            maxScore: totalMarks, // legacy alias
+            allowedFormats: Array.isArray(data.allowedFormats) ? data.allowedFormats : ['pdf', 'docx'],
+            maxFileSizeMB: Number.isFinite(data.maxFileSizeMB) ? data.maxFileSizeMB : (parseInt(data.maxFileSizeMB, 10) || 10),
+            attachment: data.attachment ?? null,
+            rubric: data.rubric ?? null,
+            rubricVisible: data.rubricVisible ?? false,
+            status: 'draft',
+            extensions: data.extensions && typeof data.extensions === 'object' ? { ...data.extensions } : {},
+            createdAt: nowISO,
+          };
+          set((state) => ({ assignments: [...state.assignments, assignment] }));
+          return assignment;
+        },
+
+        // Patch an assignment (owner only). Once ANY submission exists, restrict
+        // the patch to deadline/extension fields only (dueDate, extensions,
+        // status) so the task spec/marks/instructions can't change mid-flight.
+        // Keeps legacy aliases coherent. Recomputes nothing destructive.
+        updateAssignment: (id, patch = {}) => {
+          const state = get();
+          const asgn = state.assignments.find(a => a.id === id);
+          if (!asgn) return null;
+          const owner = asgn.lecturerId ?? asgn.createdBy;
+          if (owner && state.user && owner !== state.user.id) return null;
+
+          const hasSubmissions = state.submissions.some(s => s.assignmentId === id);
+          let next;
+          if (hasSubmissions) {
+            // deadline/extension/status only
+            next = {};
+            if (patch.dueDate !== undefined) next.dueDate = patch.dueDate;
+            if (patch.extensions !== undefined) next.extensions = { ...(asgn.extensions || {}), ...patch.extensions };
+            if (patch.status !== undefined) next.status = patch.status;
+          } else {
+            next = { ...patch };
+            // keep canonical<->legacy aliases coherent
+            if (next.instructions !== undefined) next.description = next.instructions;
+            else if (next.description !== undefined) next.instructions = next.description;
+            if (next.totalMarks !== undefined) {
+              next.totalMarks = Number.isFinite(next.totalMarks) ? next.totalMarks : (parseInt(next.totalMarks, 10) || 0);
+              next.maxScore = next.totalMarks;
+            } else if (next.maxScore !== undefined) {
+              next.maxScore = Number.isFinite(next.maxScore) ? next.maxScore : (parseInt(next.maxScore, 10) || 0);
+              next.totalMarks = next.maxScore;
+            }
+            if (next.extensions !== undefined) next.extensions = { ...(asgn.extensions || {}), ...next.extensions };
+          }
+
+          let updated = null;
+          set((s) => ({
+            assignments: s.assignments.map(a => {
+              if (a.id !== id) return a;
+              updated = { ...a, ...next, id: a.id, lecturerId: a.lecturerId, createdBy: a.createdBy, createdAt: a.createdAt };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        // Delete an assignment (owner only) and its submissions.
+        deleteAssignment: (id) => {
+          const state = get();
+          const asgn = state.assignments.find(a => a.id === id);
+          if (!asgn) return;
+          const owner = asgn.lecturerId ?? asgn.createdBy;
+          if (owner && state.user && owner !== state.user.id) return;
+          set((s) => ({
+            assignments: s.assignments.filter(a => a.id !== id),
+            submissions: s.submissions.filter(sub => sub.assignmentId !== id),
           }));
         },
-        gradeSubmission: (submissionId, score, feedback) => set((state) => ({
-          submissions: state.submissions.map(s =>
-            s.id === submissionId ? { ...s, score, feedback } : s
-          )
+
+        // Publish a draft assignment -> status 'active' and notify students.
+        publishAssignment: (id) => {
+          const state = get();
+          const asgn = state.assignments.find(a => a.id === id);
+          if (!asgn) return null;
+          const owner = asgn.lecturerId ?? asgn.createdBy;
+          if (owner && state.user && owner !== state.user.id) return null;
+          set((s) => ({
+            assignments: s.assignments.map(a => a.id === id ? { ...a, status: 'active' } : a),
+          }));
+          const course = state.courses.find(c => c.id === asgn.courseId);
+          const courseCode = course?.code || 'Course';
+          state.pushNotification({
+            target: 'student',
+            type: 'assignment',
+            text: `New assignment published: "${asgn.title}" (${courseCode})`,
+            link: '/dashboard/assignments',
+          });
+          return get().assignments.find(a => a.id === id);
+        },
+
+        // Extend the global deadline for an assignment (owner-scoped).
+        extendAssignmentDeadline: (id, newDueISO) =>
+          get().updateAssignment(id, { dueDate: newDueISO }),
+
+        // Extend the deadline for a SINGLE student (owner-scoped).
+        extendStudentDeadline: (id, studentId, newDueISO) =>
+          get().updateAssignment(id, { extensions: { [studentId]: newDueISO } }),
+
+        // Lifecycle status of an assignment FOR A STUDENT, honoring that
+        // student's per-student extension. Returns 'upcoming'|'active'|'closed'.
+        getAssignmentStatus: (assignment, studentId) => {
+          if (!assignment) return 'closed';
+          if (assignment.status === 'draft') return 'upcoming';
+          if (assignment.status === 'closed') return 'closed';
+          const now = Date.now();
+          const start = Date.parse(assignment.startAt);
+          if (!Number.isNaN(start) && now < start) return 'upcoming';
+          const due = get()._effectiveDueMs(assignment, studentId);
+          if (!Number.isNaN(due) && now > due) return 'closed';
+          return 'active';
+        },
+
+        // Submit (or RESUBMIT) the current student's work for an assignment.
+        // A resubmission REPLACES the student's prior submission. Rejected (and
+        // returns { error }) if past the effective due date. Keeps the legacy
+        // 3-arg signature (assignmentId, answerText/content, file/attachment).
+        submitAssignment: (assignmentId, answerText = '', file = null) => {
+          const state = get();
+          const { user } = state;
+          if (!user) return { error: 'Not signed in.' };
+          const assignment = state.assignments.find(a => a.id === assignmentId);
+          if (!assignment) return { error: 'Assignment not found.' };
+
+          // Reject past the effective due date (global dueDate or this student's
+          // extension), and reject explicitly closed assignments.
+          if (assignment.status === 'closed') return { error: 'This assignment is closed.' };
+          const due = state._effectiveDueMs(assignment, user.id);
+          if (!Number.isNaN(due) && Date.now() > due) {
+            return { error: 'The deadline for this assignment has passed.' };
+          }
+
+          const submittedAt = new Date().toISOString();
+          const existing = state.submissions.find(
+            s => s.assignmentId === assignmentId && s.studentId === user.id
+          );
+          const submission = {
+            id: existing ? existing.id : nextId(),
+            assignmentId,
+            studentId: user.id,
+            studentName: user.name,
+            answerText: answerText ?? '',
+            content: answerText ?? '', // legacy alias
+            file: file ?? null,
+            attachment: file ?? null, // legacy alias
+            submittedAt,
+            score: null,
+            feedback: '',
+            status: 'submitted',
+          };
+
+          set((s) => ({
+            submissions: existing
+              ? s.submissions.map(sub => sub.id === existing.id ? submission : sub)
+              : [...s.submissions, submission],
+          }));
+          return submission;
+        },
+
+        // Grade a submission and notify the student. Sets status 'graded'.
+        gradeSubmission: (submissionId, score, feedback = '') => {
+          const state = get();
+          const sub = state.submissions.find(s => s.id === submissionId);
+          if (!sub) return null;
+          const numericScore = Number.isFinite(score) ? score : (parseInt(score, 10) || 0);
+          let updated = null;
+          set((s) => ({
+            submissions: s.submissions.map(x => {
+              if (x.id !== submissionId) return x;
+              updated = { ...x, score: numericScore, feedback: feedback ?? '', status: 'graded' };
+              return updated;
+            }),
+          }));
+          const assignment = state.assignments.find(a => a.id === sub.assignmentId);
+          state.pushNotification({
+            recipientId: sub.studentId,
+            type: 'assignment',
+            text: `Your assignment "${assignment?.title || 'submission'}" has been graded`,
+            link: '/dashboard/assignments',
+          });
+          return updated;
+        },
+
+        // All submissions for an assignment (lecturer view).
+        getAssignmentSubmissions: (assignmentId) =>
+          get().submissions.filter(s => s.assignmentId === assignmentId),
+
+        // ─── QUIZ ACTIONS (rich model) ───
+        // Recompute totalMarks as the sum of question marks (ints, default 1).
+        _recalcTotalMarks: (questions = []) =>
+          questions.reduce((sum, q) => sum + (Number.isFinite(q?.marks) ? q.marks : (parseInt(q?.marks, 10) || 0)), 0),
+
+        // Normalize a question to the canonical rich shape.
+        _normalizeQuestion: (q = {}, fallbackId) => {
+          const type = q.type === 'tf' || q.type === 'short' ? q.type : 'mcq';
+          const text = q.text ?? q.question ?? '';
+          const marks = Number.isFinite(q.marks) ? q.marks : (parseInt(q.marks, 10) || 1);
+          let correct = q.correct ?? null;
+          if (type === 'mcq') correct = Number.isFinite(correct) ? correct : (parseInt(correct, 10) || 0);
+          else if (type === 'tf') correct = correct === true || correct === 'true';
+          else correct = q.correct ?? null; // short: model answer or null
+          return {
+            id: q.id ?? fallbackId,
+            type,
+            text,
+            question: text, // legacy alias for existing UI
+            options: type === 'mcq' ? (Array.isArray(q.options) ? q.options : ['', '', '', '']) : [],
+            correct,
+            marks,
+          };
+        },
+
+        // Create a DRAFT quiz owned by the current user. Returns the quiz.
+        addQuiz: (data = {}) => {
+          const { user } = get();
+          const id = Date.now();
+          const questions = (data.questions || []).map((q, i) =>
+            get()._normalizeQuestion(q, id + i + 1)
+          );
+          const totalMarks = get()._recalcTotalMarks(questions);
+          const nowISO = new Date().toISOString();
+          const quiz = {
+            id,
+            courseId: data.courseId ?? null,
+            lecturerId: user?.id ?? null,
+            createdBy: user?.id ?? null, // legacy alias
+            title: data.title ?? '',
+            instructions: data.instructions ?? data.description ?? '',
+            description: data.instructions ?? data.description ?? '', // legacy alias
+            startAt: data.startAt ?? nowISO,
+            endAt: data.endAt ?? new Date(Date.now() + 86400000 * 7).toISOString(),
+            timeLimit: parseInt(data.timeLimit, 10) || 15,
+            totalMarks,
+            attemptsAllowed: parseInt(data.attemptsAllowed, 10) || 1,
+            shuffleQuestions: !!data.shuffleQuestions,
+            shuffleOptions: !!data.shuffleOptions,
+            displayMode: data.displayMode === 'one' ? 'one' : 'all',
+            status: 'draft',
+            questions,
+            createdAt: nowISO,
+          };
+          set((state) => ({ quizzes: [...state.quizzes, quiz] }));
+          return quiz;
+        },
+
+        // Update a quiz. If it has ANY attempt, restrict the patch to { endAt }
+        // (deadline extension) only. Otherwise allow a full edit. Always recompute
+        // totalMarks from questions. Owner-scoped.
+        updateQuiz: (id, patch = {}) => {
+          const state = get();
+          const quiz = state.quizzes.find(q => q.id === id);
+          if (!quiz) return null;
+          if (quiz.lecturerId && state.user && quiz.lecturerId !== state.user.id) return null;
+
+          const hasAttempts = state.quizAttempts.some(a => a.quizId === id);
+          let nextPatch;
+          if (hasAttempts) {
+            nextPatch = patch.endAt ? { endAt: patch.endAt } : {};
+          } else {
+            nextPatch = { ...patch };
+            if (nextPatch.questions) {
+              nextPatch.questions = nextPatch.questions.map((q, i) =>
+                state._normalizeQuestion(q, (Date.now() + i + 1))
+              );
+            }
+            // keep legacy aliases coherent
+            if (nextPatch.instructions !== undefined) nextPatch.description = nextPatch.instructions;
+            if (nextPatch.displayMode !== undefined) nextPatch.displayMode = nextPatch.displayMode === 'one' ? 'one' : 'all';
+          }
+
+          let updated = null;
+          set((s) => ({
+            quizzes: s.quizzes.map(q => {
+              if (q.id !== id) return q;
+              const merged = { ...q, ...nextPatch };
+              merged.totalMarks = s._recalcTotalMarks(merged.questions);
+              updated = merged;
+              return merged;
+            }),
+          }));
+          return updated;
+        },
+
+        // Delete a quiz (owner only) and its attempts.
+        deleteQuiz: (id) => {
+          const state = get();
+          const quiz = state.quizzes.find(q => q.id === id);
+          if (!quiz) return;
+          if (quiz.lecturerId && state.user && quiz.lecturerId !== state.user.id) return;
+          set((s) => ({
+            quizzes: s.quizzes.filter(q => q.id !== id),
+            quizAttempts: s.quizAttempts.filter(a => a.quizId !== id),
+          }));
+        },
+
+        // Publish a draft quiz and notify students.
+        publishQuiz: (id) => {
+          const state = get();
+          const quiz = state.quizzes.find(q => q.id === id);
+          if (!quiz) return null;
+          if (quiz.lecturerId && state.user && quiz.lecturerId !== state.user.id) return null;
+          set((s) => ({
+            quizzes: s.quizzes.map(q => q.id === id ? { ...q, status: 'published' } : q),
+          }));
+          const course = state.courses.find(c => c.id === quiz.courseId);
+          const courseCode = course?.code || 'Course';
+          state.pushNotification({
+            target: 'student',
+            type: 'quiz',
+            text: `New quiz published: "${quiz.title}" (${courseCode})`,
+            link: '/dashboard/quizzes',
+          });
+          return get().quizzes.find(q => q.id === id);
+        },
+
+        // Extend a quiz deadline (owner-scoped via updateQuiz's endAt path).
+        extendQuizDeadline: (id, newEndAtISO) => get().updateQuiz(id, { endAt: newEndAtISO }),
+
+        // Lifecycle status of a quiz relative to now.
+        getQuizStatus: (quiz) => {
+          if (!quiz || quiz.status !== 'published') return 'draft';
+          const now = Date.now();
+          const start = Date.parse(quiz.startAt);
+          const end = Date.parse(quiz.endAt);
+          if (!Number.isNaN(start) && now < start) return 'upcoming';
+          if (!Number.isNaN(end) && now > end) return 'closed';
+          return 'active';
+        },
+
+        // Begin (or resume) the current student's attempt at a quiz.
+        // Returns the attempt, or { error } when blocked.
+        startQuizAttempt: (quizId) => {
+          const state = get();
+          const { user } = state;
+          if (!user) return { error: 'Not signed in.' };
+          const quiz = state.quizzes.find(q => q.id === quizId);
+          if (!quiz) return { error: 'Quiz not found.' };
+          if (state.getQuizStatus(quiz) !== 'active') return { error: 'This quiz is not currently open.' };
+
+          const mine = state.quizAttempts.filter(a => a.quizId === quizId && a.studentId === user.id);
+          const inProgress = mine.find(a => a.status === 'in-progress');
+          if (inProgress) return inProgress; // resume
+
+          const used = mine.length;
+          if (used >= (quiz.attemptsAllowed || 1)) return { error: 'No attempts remaining.' };
+
+          // Question order (optionally shuffled)
+          let questionOrder = quiz.questions.map(q => q.id);
+          if (quiz.shuffleQuestions) questionOrder = shuffleArray(questionOrder);
+
+          // Per-mcq option orders (optionally shuffled)
+          const optionOrders = {};
+          quiz.questions.forEach(q => {
+            if (q.type === 'mcq') {
+              const idxs = q.options.map((_, i) => i);
+              optionOrders[q.id] = quiz.shuffleOptions ? shuffleArray(idxs) : idxs;
+            }
+          });
+
+          const maxScore = state._recalcTotalMarks(quiz.questions);
+          const attempt = {
+            id: nextId(),
+            quizId,
+            studentId: user.id,
+            studentName: user.name,
+            answers: {},
+            questionOrder,
+            optionOrders,
+            autoScore: 0,
+            manualScore: null,
+            totalScore: 0,
+            maxScore,
+            status: 'in-progress',
+            startedAt: new Date().toISOString(),
+            submittedAt: null,
+            timeTakenSec: null,
+            flags: { tabSwitches: 0 },
+          };
+          set((s) => ({ quizAttempts: [...s.quizAttempts, attempt] }));
+          return attempt;
+        },
+
+        // Autosave merged answers; no grading.
+        saveAttemptProgress: (attemptId, answers = {}) => set((state) => ({
+          quizAttempts: state.quizAttempts.map(a =>
+            a.id === attemptId && a.status === 'in-progress'
+              ? { ...a, answers: { ...a.answers, ...answers } }
+              : a
+          ),
         })),
 
-        // ─── QUIZ ACTIONS ───
-        addQuiz: (quiz) => set((state) => ({
-          quizzes: [...state.quizzes, { ...quiz, id: Date.now(), status: 'active' }]
-        })),
+        // Record a tab switch; auto-submit on the 3rd and alert the lecturer.
+        recordTabSwitch: (attemptId) => {
+          const state = get();
+          const attempt = state.quizAttempts.find(a => a.id === attemptId);
+          if (!attempt || attempt.status !== 'in-progress') return;
+          const switches = (attempt.flags?.tabSwitches || 0) + 1;
+          set((s) => ({
+            quizAttempts: s.quizAttempts.map(a =>
+              a.id === attemptId ? { ...a, flags: { ...a.flags, tabSwitches: switches } } : a
+            ),
+          }));
+          if (switches >= 3) {
+            const quiz = state.quizzes.find(q => q.id === attempt.quizId);
+            const fresh = get().quizAttempts.find(a => a.id === attemptId);
+            get().submitQuizAttempt(attemptId, fresh?.answers || {});
+            if (quiz?.lecturerId) {
+              get().pushNotification({
+                recipientId: quiz.lecturerId,
+                type: 'system',
+                text: `Suspicious activity: ${attempt.studentName} switched tabs 3x during "${quiz.title}"`,
+                isUrgent: true,
+              });
+            }
+          }
+        },
+
+        // Finalize an attempt: auto-grade mcq/tf, leave short answers ungraded.
+        submitQuizAttempt: (attemptId, answers = {}) => {
+          const state = get();
+          const attempt = state.quizAttempts.find(a => a.id === attemptId);
+          if (!attempt || attempt.status !== 'in-progress') {
+            return state.quizAttempts.find(a => a.id === attemptId) || null;
+          }
+          const quiz = state.quizzes.find(q => q.id === attempt.quizId);
+          const finalAnswers = { ...attempt.answers, ...answers };
+
+          let autoScore = 0;
+          let maxScore = 0;
+          let hasShort = false;
+          (quiz?.questions || []).forEach(q => {
+            maxScore += q.marks || 0;
+            const ans = finalAnswers[q.id];
+            if (q.type === 'mcq') {
+              if (ans === q.correct) autoScore += q.marks || 0;
+            } else if (q.type === 'tf') {
+              if (ans === q.correct) autoScore += q.marks || 0;
+            } else if (q.type === 'short') {
+              hasShort = true;
+            }
+          });
+
+          const submittedAt = new Date().toISOString();
+          const timeTakenSec = Math.max(
+            0,
+            Math.round((Date.parse(submittedAt) - Date.parse(attempt.startedAt)) / 1000)
+          );
+          const status = hasShort ? 'submitted' : 'graded';
+          const manualScore = null;
+          const totalScore = autoScore; // manual added at grading time
+
+          let result = null;
+          set((s) => ({
+            quizAttempts: s.quizAttempts.map(a => {
+              if (a.id !== attemptId) return a;
+              result = {
+                ...a,
+                answers: finalAnswers,
+                autoScore,
+                manualScore,
+                totalScore,
+                maxScore,
+                status,
+                submittedAt,
+                timeTakenSec,
+              };
+              return result;
+            }),
+          }));
+
+          if (quiz) {
+            get().pushNotification({
+              recipientId: attempt.studentId,
+              type: 'result',
+              text: `Your result for "${quiz.title}" is available`,
+              link: '/dashboard/quizzes',
+            });
+          }
+          return result;
+        },
+
+        // Award per-short-question marks; finalize grading.
+        gradeShortAnswers: (attemptId, marksByQuestionId = {}) => {
+          const state = get();
+          const attempt = state.quizAttempts.find(a => a.id === attemptId);
+          if (!attempt) return null;
+          const quiz = state.quizzes.find(q => q.id === attempt.quizId);
+
+          // Sum manual marks, clamped to each short question's max.
+          let manualScore = 0;
+          (quiz?.questions || []).forEach(q => {
+            if (q.type !== 'short') return;
+            const raw = marksByQuestionId[q.id];
+            const m = Number.isFinite(raw) ? raw : (parseInt(raw, 10) || 0);
+            manualScore += Math.max(0, Math.min(m, q.marks || 0));
+          });
+
+          const totalScore = (attempt.autoScore || 0) + manualScore;
+          let result = null;
+          set((s) => ({
+            quizAttempts: s.quizAttempts.map(a => {
+              if (a.id !== attemptId) return a;
+              result = {
+                ...a,
+                manualScore,
+                totalScore,
+                status: 'graded',
+                shortMarks: { ...(a.shortMarks || {}), ...marksByQuestionId },
+              };
+              return result;
+            }),
+          }));
+
+          if (quiz) {
+            get().pushNotification({
+              recipientId: attempt.studentId,
+              type: 'result',
+              text: `Your "${quiz.title}" has been fully graded`,
+              link: '/dashboard/quizzes',
+            });
+          }
+          return result;
+        },
+
+        // Current student's latest attempt for a quiz, or null.
+        getMyQuizAttempt: (quizId) => {
+          const state = get();
+          const { user } = state;
+          if (!user) return null;
+          const mine = state.quizAttempts.filter(a => a.quizId === quizId && a.studentId === user.id);
+          if (!mine.length) return null;
+          return mine.reduce((latest, a) =>
+            Date.parse(a.startedAt) >= Date.parse(latest.startedAt) ? a : latest
+          );
+        },
+
+        // All attempts for a quiz (lecturer view).
+        getQuizSubmissions: (quizId) =>
+          get().quizAttempts.filter(a => a.quizId === quizId),
+
+        // Aggregate quiz analytics across all quizzes (admin).
+        getQuizAnalytics: () => {
+          const state = get();
+          const quizzes = state.quizzes;
+          const attempts = state.quizAttempts;
+          const totalQuizzes = quizzes.length;
+          const publishedQuizzes = quizzes.filter(q => q.status === 'published').length;
+          const totalAttempts = attempts.length;
+
+          const scored = attempts.filter(a => a.maxScore > 0);
+          const avgScorePct = scored.length
+            ? Math.round(
+                scored.reduce((sum, a) => sum + (a.totalScore / a.maxScore) * 100, 0) / scored.length
+              )
+            : 0;
+
+          const finished = attempts.filter(a => a.status === 'submitted' || a.status === 'graded').length;
+          const completionRatePct = totalAttempts
+            ? Math.round((finished / totalAttempts) * 100)
+            : 0;
+
+          return { totalQuizzes, publishedQuizzes, totalAttempts, avgScorePct, completionRatePct };
+        },
+
+        // ─── LEGACY QUIZ RESULT (simple model — retained so old UI keeps working) ───
         submitQuizResult: (quizId, answers, score) => {
           const { user } = get();
           set((state) => ({
@@ -649,9 +1741,160 @@ export const useStore = create(
         })),
 
         // ─── PAST QUESTION ACTIONS ───
-        addPastQuestion: (pq) => set((state) => ({
-          pastQuestions: [...state.pastQuestions, { ...pq, id: Date.now() }]
-        })),
+        // Build a normalized past-question record from raw data. uploader fields
+        // come from the current user unless explicitly supplied (used by bulk add).
+        _buildPastQuestion: (data = {}, uploader = null) => {
+          const nowISO = new Date().toISOString();
+          const fileSize = Number.isFinite(data.fileSize) ? data.fileSize : (parseInt(data.fileSize, 10) || null);
+          const asFileSize = Number.isFinite(data.answerSchemeSize) ? data.answerSchemeSize : (parseInt(data.answerSchemeSize, 10) || null);
+          return {
+            id: nextId(),
+            courseCode: data.courseCode ?? '',
+            courseTitle: data.courseTitle ?? '',
+            year: data.year ?? '',
+            semester: data.semester === '2nd' ? '2nd' : '1st',
+            examType: data.examType === 'mid' ? 'mid' : 'final',
+            url: data.url ?? null,
+            fileData: data.fileData ?? null,
+            fileName: data.fileName ?? null,
+            fileSize,
+            answerSchemeUrl: data.answerSchemeUrl ?? '',
+            answerSchemeData: data.answerSchemeData ?? null,
+            answerSchemeName: data.answerSchemeName ?? null,
+            answerSchemeSize: asFileSize,
+            answerSchemeVisible: data.answerSchemeVisible ?? false,
+            uploadedBy: data.uploadedBy ?? uploader?.id ?? null,
+            uploaderName: data.uploaderName ?? uploader?.name ?? null,
+            uploaderRole: data.uploaderRole ?? uploader?.role ?? null,
+            visible: data.visible ?? true,
+            createdAt: nowISO,
+            // harmless legacy aliases so any older list UI doesn't crash
+            type: data.type ?? 'Theory',
+            questions: Array.isArray(data.questions) ? data.questions : [],
+          };
+        },
+
+        // Add a single past question, attributed to the current user.
+        addPastQuestion: (data = {}) => {
+          const state = get();
+          const pq = state._buildPastQuestion(data, state.user);
+          set((s) => ({ pastQuestions: [...s.pastQuestions, pq] }));
+          state.pushNotification({
+            target: 'student',
+            type: 'pastq',
+            text: `New past question added for ${pq.courseCode || 'a course'}`,
+            link: '/dashboard/past-questions',
+          });
+          return pq;
+        },
+
+        // Admin bulk add. Builds many records at once; fires ONE summary
+        // notification rather than spamming students per-item.
+        addPastQuestionsBulk: (items = []) => {
+          const state = get();
+          if (!Array.isArray(items) || items.length === 0) return [];
+          const built = items.map(it => state._buildPastQuestion(it, state.user));
+          set((s) => ({ pastQuestions: [...s.pastQuestions, ...built] }));
+          state.pushNotification({
+            target: 'student',
+            type: 'pastq',
+            text: `${built.length} new past question${built.length !== 1 ? 's' : ''} added`,
+            link: '/dashboard/past-questions',
+          });
+          return built;
+        },
+
+        // Patch a past question (owner or admin only).
+        updatePastQuestion: (id, patch = {}) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return null;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return null;
+          const next = { ...patch };
+          if (next.semester !== undefined) next.semester = next.semester === '2nd' ? '2nd' : '1st';
+          if (next.examType !== undefined) next.examType = next.examType === 'mid' ? 'mid' : 'final';
+          let updated = null;
+          set((s) => ({
+            pastQuestions: s.pastQuestions.map(p => {
+              if (p.id !== id) return p;
+              updated = { ...p, ...next, id: p.id, uploadedBy: p.uploadedBy, createdAt: p.createdAt };
+              return updated;
+            }),
+          }));
+          return updated;
+        },
+
+        // Delete a past question (owner or admin only).
+        deletePastQuestion: (id) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return;
+          set((s) => ({ pastQuestions: s.pastQuestions.filter(p => p.id !== id) }));
+        },
+
+        togglePastQuestionVisibility: (id) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return;
+          set((s) => ({
+            pastQuestions: s.pastQuestions.map(p =>
+              p.id === id ? { ...p, visible: p.visible === false ? true : false } : p
+            ),
+          }));
+        },
+
+        toggleAnswerSchemeVisibility: (id) => {
+          const state = get();
+          const pq = state.pastQuestions.find(p => p.id === id);
+          if (!pq) return;
+          const isOwner = pq.uploadedBy && state.user && pq.uploadedBy === state.user.id;
+          const isAdmin = state.user?.role === 'admin';
+          if (!isOwner && !isAdmin) return;
+          set((s) => ({
+            pastQuestions: s.pastQuestions.map(p =>
+              p.id === id ? { ...p, answerSchemeVisible: !p.answerSchemeVisible } : p
+            ),
+          }));
+        },
+
+        // All VISIBLE past questions (students/admin). Cross-department — NOT
+        // gated by registration/level. Newest first.
+        getPastQuestions: () => {
+          const state = get();
+          return state.pastQuestions
+            .filter(p => p.visible !== false)
+            .sort((a, b) => {
+              const ta = Date.parse(a.createdAt);
+              const tb = Date.parse(b.createdAt);
+              if (!Number.isNaN(ta) && !Number.isNaN(tb)) return tb - ta;
+              return 0;
+            });
+        },
+
+        // Total inline-base64 bytes across BOTH materials and past questions
+        // (admin storage gauge). Counts fileData (+ answer-scheme data) sizes.
+        getTotalStorageUsage: () => {
+          const state = get();
+          const matBytes = state.materials.reduce(
+            (sum, m) => sum + (m.fileData && Number.isFinite(m.fileSize) ? m.fileSize : 0),
+            0
+          );
+          const pqBytes = state.pastQuestions.reduce((sum, p) => {
+            let s = 0;
+            if (p.fileData && Number.isFinite(p.fileSize)) s += p.fileSize;
+            if (p.answerSchemeData && Number.isFinite(p.answerSchemeSize)) s += p.answerSchemeSize;
+            return sum + s;
+          }, 0);
+          return matBytes + pqBytes;
+        },
 
         // ─── MESSAGE ACTIONS ───
         sendMessage: (toId, toName, content) => {
@@ -667,11 +1910,14 @@ export const useStore = create(
           };
           set((state) => ({ messages: [...state.messages, newMsg] }));
         },
-        markMessagesRead: (fromId) => set((state) => ({
-          messages: state.messages.map(m =>
-            m.from === fromId ? { ...m, read: true } : m
-          )
-        })),
+        markMessagesRead: (fromId) => {
+          const { user } = get();
+          set((state) => ({
+            messages: state.messages.map(m =>
+              m.from === fromId && m.to === user?.id ? { ...m, read: true } : m
+            )
+          }));
+        },
 
         // ─── BROADCAST ACTIONS ───
         sendLecturerBroadcast: (data) => {
@@ -709,6 +1955,71 @@ export const useStore = create(
         adminViewAs: null,
         setAdminViewAs: (role) => set({ adminViewAs: role }),
 
+        // ─── ACADEMIC CALENDAR ───
+        // The institution moves through (session, semester) terms with exactly one
+        // registration window open at a time. These four guided transitions are the
+        // ONLY way the calendar changes. Promotion is a SEPARATE concern
+        // (setStudentLevel / promoteStudents) and never happens here.
+        openRegistration: () => {
+          set((state) => ({
+            semesterOpen: true,
+            notifications: [
+              { id: Date.now(), text: `Course registration for the ${state.currentSemester} semester (${state.currentSession}) is now open.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+              ...state.notifications,
+            ],
+          }));
+        },
+        closeRegistration: () => {
+          set((state) => {
+            if (!state.semesterOpen) return {};
+            return {
+              semesterOpen: false,
+              notifications: [
+                { id: Date.now(), text: `Registration for the ${state.currentSemester} semester (${state.currentSession}) is now closed.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+                ...state.notifications,
+              ],
+            };
+          });
+        },
+        // 1st -> 2nd semester within the same session (registration starts closed).
+        // Registration carries over within a session, so enrolments are NOT reset.
+        advanceSemester: () => {
+          const state = get();
+          if (state.currentSemester !== '1st') {
+            return { success: false, error: 'Already in the second semester — begin a new session instead.' };
+          }
+          set((s) => ({
+            currentSemester: '2nd',
+            semesterOpen: false,
+            notifications: [
+              { id: Date.now(), text: `The second semester (${s.currentSession}) has begun. Registration will open when the registrar opens it.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+              ...s.notifications,
+            ],
+          }));
+          return { success: true };
+        },
+        // Begin a new academic session: back to 1st semester, locked, and every
+        // student's registration is reset for the new year. Does NOT change levels.
+        beginNewSession: (sessionLabel) => {
+          const state = get();
+          const s = String(sessionLabel || nextSession(state.currentSession) || '').trim();
+          if (!s) return { success: false, error: 'A session value is required.' };
+          const reset = (u) => (u && u.role === 'student') ? { ...u, enrolledCourseIds: [] } : u;
+          set((st) => ({
+            currentSession: s,
+            currentSemester: '1st',
+            semesterOpen: false,
+            sessionHistory: [...(st.sessionHistory || []), { session: st.currentSession, closedAt: new Date().toISOString() }],
+            dynamicUsers: st.dynamicUsers.map(reset),
+            user: reset(st.user),
+            notifications: [
+              { id: Date.now(), text: `The ${s} academic session has begun. Registration reopens once the registrar opens the first semester.`, time: 'Just now', read: false, isUrgent: true, target: 'student' },
+              ...st.notifications,
+            ],
+          }));
+          return { success: true, session: s };
+        },
+
         addUser: (userData) => {
           const allUsers = get().getAllUsers();
           const targetId = (userData.role === 'student' ? userData.matNo : userData.staffId);
@@ -739,6 +2050,7 @@ export const useStore = create(
 
           const newUser = {
             ...userData,
+            level: userData.role === 'student' ? (userData.level || '100L') : userData.level,
             id: storedId || (userData.role + '-' + Date.now()),
             matNo: targetId,
             password: surname,
@@ -746,6 +2058,16 @@ export const useStore = create(
             status: 'active'
           };
           set(state => ({ dynamicUsers: [...state.dynamicUsers, newUser] }));
+
+          // Fire-and-forget side effects — must NOT block or change the return.
+          get()._fireWelcomeEmail({ email: newUser.email, name: newUser.name, role: newUser.role });
+          get().pushNotification({
+            target: 'admin',
+            type: 'system',
+            text: `New ${newUser.role} account created: ${newUser.name}`,
+            link: '/admin',
+          });
+
           return { success: true };
         },
 
@@ -845,50 +2167,70 @@ export const useStore = create(
         },
 
         enrollInCourse: (courseId) => {
-          const { user } = get();
+          const state = get();
+          const { user } = state;
           if (!user || user.role !== 'student') return;
-          
-          const enrolledIds = user.enrolledCourseIds || [];
-          if (enrolledIds.includes(courseId)) return;
-          
-          const newUser = { ...user, enrolledCourseIds: [...enrolledIds, courseId] };
-          
-          set((state) => ({
+
+          // One rule, shared with the registration page (registrationEligibility).
+          const course = state.courses.find(c => c.id === courseId);
+          if (!state.registrationEligibility(course, user).ok) return;
+
+          // Materialize the implicit program+level registration the first time the
+          // student curates it, so add/drop stays coherent with what they see.
+          const baseIds = state.getStudentCourseIds(user);
+          if (baseIds.includes(courseId)) return;
+
+          const newUser = { ...user, enrolledCourseIds: [...baseIds, courseId] };
+          set((s) => ({
             user: newUser,
-            dynamicUsers: state.dynamicUsers.map(u => u.id === user.id ? newUser : u)
+            dynamicUsers: s.dynamicUsers.map(u => u.id === user.id ? newUser : u)
           }));
         },
 
         unenrollFromCourse: (courseId) => {
-          const { user } = get();
+          const state = get();
+          const { user } = state;
           if (!user || user.role !== 'student') return;
-          
-          const enrolledIds = user.enrolledCourseIds || [];
-          const newUser = { ...user, enrolledCourseIds: enrolledIds.filter(id => id !== courseId) };
-          
-          set((state) => ({
+
+          const baseIds = state.getStudentCourseIds(user);
+          const newUser = { ...user, enrolledCourseIds: baseIds.filter(id => id !== courseId) };
+          set((s) => ({
             user: newUser,
-            dynamicUsers: state.dynamicUsers.map(u => u.id === user.id ? newUser : u)
+            dynamicUsers: s.dynamicUsers.map(u => u.id === user.id ? newUser : u)
           }));
         },
 
-        scheduleSession: (courseId, dateTime) => {
-          const { courses } = get();
+        scheduleSession: (courseId, dateTime, opts = {}) => {
+          const { courses, user } = get();
           const targetCourse = courses.find(c => c.id === courseId);
           if (!targetCourse) return;
+
+          const startISO = opts.startAt ?? dateTime;
+          const durationMin = Number.isFinite(opts.durationMinutes)
+            ? opts.durationMinutes
+            : (parseInt(opts.durationMinutes, 10) || 120);
+          const endISO = opts.endAt ?? (startISO ? new Date(new Date(startISO).getTime() + durationMin * 60000).toISOString() : null);
 
           const newScheduled = {
             id: Date.now(),
             courseId,
             courseCode: targetCourse.code,
             title: targetCourse.title,
-            dateTime: dateTime,
-            lecturerName: get().user.name
+            dateTime: dateTime, // legacy field kept for existing UI
+            lecturerName: user?.name,
+            lecturerId: user?.id,
+            // ─ video-session model ─
+            sessionType: opts.sessionType === 'voice' ? 'voice' : 'video',
+            startAt: startISO,
+            endAt: endISO,
+            recording: opts.recording ?? false,
+            status: 'upcoming',
           };
 
           set(state => ({
             scheduledSessions: [...state.scheduledSessions, newScheduled]
           }));
+          return newScheduled;
         },
 
         deleteScheduledSession: (id) => {
@@ -897,29 +2239,179 @@ export const useStore = create(
            }));
         },
 
+        // ─── STUDENT COURSE SELECTORS (single source of truth) ───
+        // A student's courses = their explicit registration (enrolledCourseIds),
+        // or, until they register, the catalogue for their program + level.
+        // Every page MUST derive a student's courses from these, not ad-hoc filters.
+        getStudentCourseIds: (targetUser) => {
+          const state = get();
+          const u = targetUser || state.user;
+          if (!u || u.role !== 'student') return [];
+          if (u.enrolledCourseIds?.length) return u.enrolledCourseIds;
+          return state.courses
+            .filter(c => c.program === u.program && c.level === u.level)
+            .map(c => c.id);
+        },
+        getStudentCourses: (targetUser) => {
+          const state = get();
+          const ids = state.getStudentCourseIds(targetUser);
+          return state.courses.filter(c => ids.includes(c.id));
+        },
+
+        // Single source of truth for "can this student register for this course".
+        // Used by enrollInCourse (the store guard) AND the registration page (UI),
+        // so the rule can never drift between them. Returns { ok, reason, detail }.
+        // reason: 'closed' | 'level' | 'semester' | 'not-student' | 'unknown' | null
+        registrationEligibility: (course, targetUser) => {
+          const state = get();
+          const u = targetUser || state.user;
+          if (!u || u.role !== 'student') return { ok: false, reason: 'not-student' };
+          if (!state.semesterOpen) return { ok: false, reason: 'closed' };
+          if (!course) return { ok: false, reason: 'unknown' };
+          if (course.level && u.level && course.level !== u.level) {
+            return { ok: false, reason: 'level', detail: course.level };
+          }
+          const courseSem = course.semester || semesterFromCode(course.code);
+          if (courseSem && state.currentSemester && courseSem !== state.currentSemester) {
+            return { ok: false, reason: 'semester', detail: courseSem };
+          }
+          return { ok: true, reason: null };
+        },
+
         // ─── ANALYTICS HELPERS ───
         getLecturerModules: (lecturerId) => {
-          return get().courses.filter(c => c.lecturerId === lecturerId);
+          return get().getLecturerRegisteredCourses(lecturerId);
         },
         getModuleEnrolmentCount: (courseId) => {
-          const allUsers = get().getAllUsers();
-          return allUsers.filter(u => u.role === 'student' && u.enrolledCourseIds?.includes(courseId)).length;
+          const state = get();
+          return state.getAllUsers().filter(u => u.role === 'student' && state.getStudentCourseIds(u).includes(courseId)).length;
         },
         getLecturerTotalStudents: (lecturerId) => {
-          const myCourses = get().getLecturerModules(lecturerId);
-          const myCourseIds = myCourses.map(c => c.id);
-          const allUsers = get().getAllUsers();
-          return allUsers.filter(u => u.role === 'student' && u.enrolledCourseIds?.some(id => myCourseIds.includes(id))).length;
+          const state = get();
+          const myCourseIds = state.getLecturerModules(lecturerId).map(c => c.id);
+          return state.getAllUsers().filter(u => u.role === 'student' && state.getStudentCourseIds(u).some(id => myCourseIds.includes(id))).length;
         },
         getRecentSubmissions: (lecturerId, limit = 5) => {
-          const { assignments, submissions, courses } = get();
-          const myCourseIds = courses.filter(c => c.lecturerId === lecturerId).map(c => c.id);
+          const { assignments, submissions } = get();
+          const myCourseIds = get().getLecturerRegisteredCourses(lecturerId).map(c => c.id);
           const myAssignmentIds = assignments.filter(a => myCourseIds.includes(a.courseId)).map(a => a.id);
           
           return submissions
             .filter(s => myAssignmentIds.includes(s.assignmentId))
             .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
             .slice(0, limit);
+        },
+
+        // ─── LECTURER COURSE REG ACTIONS ───
+        setLecturerCourseRegWindow: (config) => set((state) => ({
+          lecturerCourseRegWindow: { ...state.lecturerCourseRegWindow, ...config },
+          lecturerRegOverrides: [], // clear individual overrides when window changes
+        })),
+        openLecturerCourseReg: (startDate, endDate, semester, session) => {
+          set((state) => ({
+            lecturerCourseRegWindow: { open: true, startDate, endDate, semester, session },
+            lecturerRegOverrides: [],
+            notifications: [
+              { id: Date.now(), text: `Lecturer course registration for ${semester} semester (${session}) is now open. Deadline: ${new Date(endDate).toLocaleDateString()}.`, time: 'Just now', read: false, isUrgent: true, target: 'lecturer' },
+              ...state.notifications,
+            ],
+          }));
+        },
+        closeLecturerCourseReg: () => {
+          set((state) => ({
+            lecturerCourseRegWindow: { ...state.lecturerCourseRegWindow, open: false },
+            lecturerRegOverrides: [],
+            notifications: [
+              { id: Date.now(), text: 'Lecturer course registration has been closed by the admin.', time: 'Just now', read: false, isUrgent: true, target: 'lecturer' },
+              ...state.notifications,
+            ],
+          }));
+        },
+        overrideLecturerReg: (lecturerId) => {
+          set((state) => ({
+            lecturerRegOverrides: state.lecturerRegOverrides.includes(lecturerId)
+              ? state.lecturerRegOverrides
+              : [...state.lecturerRegOverrides, lecturerId],
+          }));
+        },
+        revokeOverrideLecturerReg: (lecturerId) => {
+          set((state) => ({
+            lecturerRegOverrides: state.lecturerRegOverrides.filter(id => id !== lecturerId),
+          }));
+        },
+        // Returns whether registration is currently editable for a given lecturer
+        isLecturerRegEditable: (lecturerId) => {
+          const state = get();
+          const win = state.lecturerCourseRegWindow;
+          if (state.lecturerRegOverrides.includes(lecturerId)) return true;
+          if (!win.open) return false;
+          const now = Date.now();
+          if (win.startDate && now < new Date(win.startDate).getTime()) return false;
+          if (win.endDate && now > new Date(win.endDate).getTime()) return false;
+          return true;
+        },
+        saveLecturerCourseSelection: (lecturerId, courseIds) => {
+          set((state) => ({
+            lecturerCourseRegistrations: {
+              ...state.lecturerCourseRegistrations,
+              [lecturerId]: { courseIds, submittedAt: null },
+            },
+          }));
+        },
+        submitLecturerCourseRegistration: (lecturerId, courseIds) => {
+          set((state) => {
+            const allUsers = [...MOCK_DB.users, ...state.dynamicUsers.filter(u => !state.excludedIds.includes(u.id))];
+            const lecturer = allUsers.find(u => u.id === lecturerId);
+            
+            const oldReg = state.lecturerCourseRegistrations[lecturerId]?.courseIds || [];
+            const removedIds = oldReg.filter(id => !courseIds.includes(id));
+            
+            const updatedCourses = state.courses.map(c => {
+              if (courseIds.includes(c.id)) {
+                return { ...c, lecturerId, lecturerName: lecturer?.name };
+              } else if (removedIds.includes(c.id) && c.lecturerId === lecturerId) {
+                return { ...c, lecturerId: null, lecturerName: null };
+              }
+              return c;
+            });
+
+            return {
+              courses: updatedCourses,
+              lecturerCourseRegistrations: {
+                ...state.lecturerCourseRegistrations,
+                [lecturerId]: { courseIds, submittedAt: new Date().toISOString() },
+              },
+              lecturerRegOverrides: state.lecturerRegOverrides.filter(id => id !== lecturerId),
+            };
+          });
+        },
+        getLecturerRegisteredCourses: (lecturerId) => {
+          const state = get();
+          const reg = state.lecturerCourseRegistrations[lecturerId];
+          // If no active registration object exists for this lecturer, fallback to checking static course properties
+          if (!reg) return state.courses.filter(c => c.lecturerId === lecturerId);
+          return state.courses.filter(c => reg.courseIds.some(id => String(id) === String(c.id)));
+        },
+
+        // Returns the lecturer user object for a given courseId.
+        // Reads from lecturerCourseRegistrations (persisted) rather than
+        // course.lecturerId, which is wiped on reload by the seed-course merge.
+        getCourseAssignedLecturer: (courseId) => {
+          const state = get();
+          const regs = state.lecturerCourseRegistrations;
+          const allUsers = state.getAllUsers();
+          // Find the first submitted registration that includes this courseId
+          const lecturerId = Object.keys(regs).find(lid => {
+            const reg = regs[lid];
+            return reg.submittedAt && reg.courseIds.some(id => String(id) === String(courseId));
+          });
+          if (!lecturerId) {
+            // Fall back to the static lecturerId baked into the course (legacy seed data)
+            const course = state.courses.find(c => String(c.id) === String(courseId));
+            if (!course?.lecturerId) return null;
+            return allUsers.find(u => u.id === course.lecturerId) || null;
+          }
+          return allUsers.find(u => u.id === lecturerId) || null;
         },
 
         // ─── COURSE ACTIONS ───
@@ -957,35 +2449,115 @@ export const useStore = create(
             return { dynamicUsers, user: activeUser };
           });
         },
+
+        // Set a single student's level (admin Directory editor). Deliberate, never
+        // automatic. Changing a level resets that student's registration.
+        setStudentLevel: (userId, level) => {
+          const valid = ['100L', '200L', '300L', '400L', 'Graduated'];
+          if (!valid.includes(level)) return;
+          const apply = (u) => (u && u.id === userId && u.role === 'student')
+            ? { ...u, level, enrolledCourseIds: [], graduated: level === 'Graduated' }
+            : u;
+          set((state) => ({
+            dynamicUsers: state.dynamicUsers.map(apply),
+            user: apply(state.user),
+          }));
+        },
+
+        // Bulk, deliberate promotion (registrar tool). Advances active students one
+        // level; 400L students graduate. Optionally limited to opts.scope (an array
+        // of student ids). Never automatic — only run from the admin Promote tool.
+        promoteStudents: (opts = {}) => {
+          const order = ['100L', '200L', '300L', '400L'];
+          const ids = Array.isArray(opts.scope) ? new Set(opts.scope) : null;
+          const nextLvl = (lvl) => {
+            const i = order.indexOf(lvl);
+            if (i === -1) return lvl;
+            return i < order.length - 1 ? order[i + 1] : 'Graduated';
+          };
+          let promoted = 0;
+          const apply = (u) => {
+            if (!u || u.role !== 'student' || u.level === 'Graduated') return u;
+            if (ids && !ids.has(u.id)) return u;
+            const nl = nextLvl(u.level);
+            if (nl === u.level) return u;
+            promoted += 1;
+            return { ...u, level: nl, enrolledCourseIds: [], graduated: nl === 'Graduated' };
+          };
+          set((state) => ({
+            dynamicUsers: state.dynamicUsers.map(apply),
+            user: apply(state.user),
+          }));
+          return { promoted };
+        },
       };
     },
     {
       name: 'lms-database-storage-v13',
       storage: createJSONStorage(() => localStorage),
-      onRehydrateStorage: () => (state) => {
+      onRehydrateStorage: () => (state, error) => {
+        if (error) console.warn('[store] rehydrate error — continuing without persisted state', error);
         if (state) state.setHasHydrated(true);
       },
-      // Only persist dynamic/user-specific data — static datasets stay in code.
-      // Courses are NOT persisted so the source-of-truth (code) always wins.
-      // Dynamic course additions (admin-created ones) are ephemeral by design.
+      // Persist dynamic/user-specific data. Seed courses stay in code (source of
+      // truth), but we persist `courses` so admin/lecturer-created courses — and
+      // any student enrolment in them — survive a reload instead of dangling.
+      // The custom merge below keeps seed courses authoritative and re-applies
+      // only the runtime-created (non-seed) ones.
       partialize: (state) => ({
         user: state.user,
         dynamicUsers: state.dynamicUsers,
         excludedIds: state.excludedIds,
+        notes: state.notes,
+        courses: state.courses,
+        currentSession: state.currentSession,
+        currentSemester: state.currentSemester,
+        semesterOpen: state.semesterOpen,
+        sessionHistory: state.sessionHistory,
         liveSessions: state.liveSessions,
         scheduledSessions: state.scheduledSessions,
+        sessionAttendance: state.sessionAttendance,
         auditingUser: state.auditingUser,
         lecturerPortalActive: state.lecturerPortalActive,
         notifications: state.notifications,
+        assignments: state.assignments,
         submissions: state.submissions,
         quizResults: state.quizResults,
+        quizAttempts: state.quizAttempts,
         messages: state.messages,
         lecturerRatings: state.lecturerRatings,
         broadcasts: state.broadcasts,
         sessionMessages: state.sessionMessages,
         callHistory: state.callHistory,
         materials: state.materials,
+        pastQuestions: state.pastQuestions,
+        lecturerCourseRegWindow: state.lecturerCourseRegWindow,
+        lecturerCourseRegistrations: state.lecturerCourseRegistrations,
+        lecturerRegOverrides: state.lecturerRegOverrides,
       }),
+      merge: (persisted, current) => {
+        const p = persisted || {};
+        // Seed courses always come from code; preserve only runtime-created
+        // (non-seed) courses from storage so enrolments in them don't dangle.
+        const seedIds = new Set(current.courses.map(c => c.id));
+        const dynamicCourses = (p.courses || []).filter(c => !seedIds.has(c.id));
+        return {
+          ...current,
+          ...p,
+          courses: [...current.courses, ...dynamicCourses],
+        };
+      },
     }
   )
 );
+
+// Failsafe: never let the UI hang on the "Preparing your session" hydration gate.
+// If persist rehydration stalls or errors (e.g. corrupt/foreign-origin localStorage),
+// force the hydrated flag shortly after load so login/dashboard stay interactive.
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    if (!useStore.getState()._hasHydrated) {
+      useStore.getState().setHasHydrated(true);
+    }
+  }, 1500);
+}

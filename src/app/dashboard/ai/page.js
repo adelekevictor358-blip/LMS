@@ -1,585 +1,434 @@
 "use client";
 
-import { 
-  Pause, SkipForward, Volume2, Maximize, 
-  Paperclip, Smile, Send, Share, Bookmark,
-  Folder, Image as ImageIcon, Lock, UserPlus, Play
+import { useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Send, Video, Users, MessageSquare, History,
+  FileText, FileVideo, FileImage, File as FileIcon, Play,
+  ArrowRight, FolderOpen
 } from 'lucide-react';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Input } from "@/components/ui/input";
+import { useStore } from '@/store/useStore';
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+
+// ─── helpers ───
+function initials(name) {
+  if (!name) return '?';
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDate(timestamp) {
+  if (!timestamp) return '';
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString([], { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function materialIcon(type) {
+  switch ((type || '').toLowerCase()) {
+    case 'video':
+      return FileVideo;
+    case 'image':
+      return FileImage;
+    case 'pdf':
+    case 'doc':
+    case 'document':
+      return FileText;
+    default:
+      return FileIcon;
+  }
+}
 
 export default function LiveClassDashboard() {
+  const router = useRouter();
+  const {
+    user,
+    liveSessions,
+    sessionMessages,
+    materials,
+    callHistory,
+    courses,
+    getStudentCourseIds,
+    sendSessionMessage,
+  } = useStore();
+
+  const [draft, setDraft] = useState('');
+
+  // ─── active session: first session in one of the student's courses, else first session, else null ───
+  const activeSession = useMemo(() => {
+    const myCourseIds = getStudentCourseIds(user);
+    return (
+      liveSessions.find((s) => myCourseIds.includes(s.courseId)) ||
+      liveSessions[0] ||
+      null
+    );
+  }, [liveSessions, user, getStudentCourseIds]);
+
+  const course = activeSession
+    ? courses.find((c) => c.id === activeSession.courseId)
+    : null;
+
+  const participants = activeSession?.participants || [];
+
+  // ─── chat: messages for the active session, ordered by timestamp ───
+  const messages = useMemo(() => {
+    if (!activeSession) return [];
+    return sessionMessages
+      .filter((m) => m.sessionId === activeSession.id)
+      .slice()
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+  }, [sessionMessages, activeSession]);
+
+  // ─── class materials for the active session's course ───
+  const classMaterials = useMemo(() => {
+    if (!activeSession) return [];
+    return materials.filter((m) => m.courseId === activeSession.courseId);
+  }, [materials, activeSession]);
+
+  // ─── previous records, most-recent-first ───
+  const previousRecords = useMemo(() => {
+    return callHistory
+      .slice()
+      .sort((a, b) => new Date(b.endTime) - new Date(a.endTime));
+  }, [callHistory]);
+
+  const handleSend = (e) => {
+    e.preventDefault();
+    const text = draft.trim();
+    if (!text || !activeSession) return;
+    sendSessionMessage(activeSession.id, text);
+    setDraft('');
+  };
+
+  const courseLabel = course
+    ? `${course.code} · ${course.title}`
+    : activeSession?.title || 'Live session';
+
   return (
-    <div className="live-class-page animate-fade-in">
-      <div className="page-header">
-        <h1 className="text-3xl font-bold text-[#1e1e2d] tracking-tight">Live class</h1>
-      </div>
+    <div className="animate-fade-in flex h-full flex-col gap-6">
+      <header>
+        <h1 className="font-serif text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+          Live class
+        </h1>
+      </header>
 
-      <div className="top-section">
-        {/* Video Player Area */}
-        <div className="video-container">
-          <div className="video-header">
-            <div className="flex items-center gap-3">
-              <span className="live-badge">
-                <span className="live-dot"></span> Live
+      <div className="grid min-h-[400px] grid-cols-1 gap-6 lg:grid-cols-[2.2fr_1fr]">
+        {/* Session area */}
+        <section className="flex flex-col gap-4">
+          {activeSession ? (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-transparent bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+                    <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+                    Live
+                  </span>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {course ? course.code : activeSession.title}
+                  </h2>
+                  {course && (
+                    <>
+                      <span aria-hidden className="text-border">|</span>
+                      <span className="text-sm text-muted-foreground">{course.title}</span>
+                    </>
+                  )}
+                  <span aria-hidden className="text-border">|</span>
+                  <span className="text-sm text-muted-foreground">by</span>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-[10px]">
+                        {initials(activeSession.lecturerName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium text-foreground">
+                      {activeSession.lecturerName}
+                    </span>
+                  </div>
+                </div>
+
+                {participants.length > 0 && (
+                  <div className="flex items-center">
+                    {participants.slice(0, 4).map((p) => (
+                      <Avatar
+                        key={p.id}
+                        className="-ml-2 h-8 w-8 border-2 border-card first:ml-0"
+                      >
+                        <AvatarFallback className="text-xs">
+                          {initials(p.name)}
+                        </AvatarFallback>
+                      </Avatar>
+                    ))}
+                    {participants.length > 4 && (
+                      <span className="-ml-2 flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-secondary text-xs font-medium tabular-nums text-secondary-foreground">
+                        +{participants.length - 4}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Branded session panel (no external images) */}
+              <div className="relative flex h-[380px] w-full flex-col items-center justify-center overflow-hidden rounded-xl border border-border bg-navy text-center">
+                <span className="flex h-14 w-14 items-center justify-center rounded-full bg-card/10 text-primary-foreground">
+                  <Video size={26} strokeWidth={1.5} />
+                </span>
+                <p className="mt-4 font-serif text-3xl font-semibold tracking-tight text-primary-foreground">
+                  {course ? course.code : activeSession.title}
+                </p>
+                <p className="mt-1 max-w-prose px-6 text-sm text-primary-foreground/70">
+                  {courseLabel}
+                </p>
+                <div className="absolute inset-x-6 bottom-6 flex items-center justify-between rounded-md border border-border bg-card/95 px-4 py-2.5 shadow-sm">
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Users size={16} />
+                    {participants.length} in session
+                  </span>
+                  <Button
+                    size="sm"
+                    onClick={() => router.push(`/dashboard/classroom/${activeSession.id}`)}
+                  >
+                    Join live class
+                    <ArrowRight size={16} className="ml-1.5" />
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full min-h-[380px] flex-col items-center justify-center gap-4 rounded-xl border border-border bg-card p-8 text-center shadow-sm">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Video size={24} strokeWidth={1.5} />
               </span>
-              <h2 className="font-bold text-[#1e1e2d] text-lg">Design Patterns</h2>
-              <span className="text-slate-400">|</span>
-              <span className="text-slate-500 text-sm">by</span>
-              <div className="flex items-center gap-2">
-                <Avatar className="h-6 w-6">
-                  <AvatarImage src="https://i.pravatar.cc/150?u=rachel" />
-                  <AvatarFallback>RZ</AvatarFallback>
-                </Avatar>
-                <span className="font-semibold text-sm">Rachel Zang</span>
-              </div>
+              <p className="max-w-prose text-sm text-muted-foreground">
+                No live class is in session right now.
+              </p>
+              <Button variant="outline" onClick={() => router.push('/dashboard/classroom')}>
+                Go to live classes
+              </Button>
             </div>
-            <div className="flex items-center">
-              <div className="avatar-group">
-                <Avatar className="h-8 w-8 border-2 border-white -ml-2"><AvatarImage src="https://i.pravatar.cc/150?u=1" /></Avatar>
-                <Avatar className="h-8 w-8 border-2 border-white -ml-2"><AvatarImage src="https://i.pravatar.cc/150?u=2" /></Avatar>
-                <Avatar className="h-8 w-8 border-2 border-white -ml-2"><AvatarImage src="https://i.pravatar.cc/150?u=3" /></Avatar>
-                <Avatar className="h-8 w-8 border-2 border-white -ml-2"><AvatarImage src="https://i.pravatar.cc/150?u=4" /></Avatar>
-                <div className="h-8 w-8 border-2 border-white -ml-2 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold z-10 relative">
-                  +9
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
+        </section>
 
-          <div className="video-player-wrapper">
-            <img 
-              src="https://images.unsplash.com/photo-1573164713988-8665fc963095?q=80&w=2069&auto=format&fit=crop" 
-              alt="Teacher" 
-              className="video-poster" 
-            />
-            <div className="video-controls">
-              <div className="flex items-center gap-4">
-                <button className="control-btn"><Pause size={18} fill="currentColor" /></button>
-                <button className="control-btn"><SkipForward size={18} fill="currentColor" /></button>
-                <button className="control-btn"><Volume2 size={18} /></button>
-              </div>
-              <button className="control-btn"><Maximize size={18} /></button>
-            </div>
-          </div>
-        </div>
+        {/* Group chat */}
+        <section className="flex h-full flex-col rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Group chat</h3>
 
-        {/* Group Chat */}
-        <div className="chat-container">
-          <h3 className="font-bold text-[#1e1e2d] mb-4">Group chat</h3>
-          
-          <ScrollArea className="chat-messages">
-            <div className="message-wrapper other">
-              <Avatar className="h-8 w-8 shrink-0 mt-1"><AvatarImage src="https://i.pravatar.cc/150?u=5" /></Avatar>
-              <div className="message-content">
-                <span className="time">14:33</span>
-                <div className="bubble">
-                  Could you show some examples of what you consider to be the best practice of existing mobile onboardings?
-                </div>
+          <ScrollArea className="-mr-2 min-h-[200px] flex-1 pr-2">
+            {messages.length > 0 ? (
+              <div className="flex flex-col gap-5">
+                {messages.map((m) => {
+                  const mine = m.fromId === user?.id;
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex items-start gap-3 ${mine ? 'justify-end' : ''}`}
+                    >
+                      {!mine && (
+                        <Avatar className="mt-1 h-8 w-8 shrink-0">
+                          <AvatarFallback className="text-xs">
+                            {initials(m.fromName)}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                      <div
+                        className={`flex max-w-[80%] flex-col gap-1 ${mine ? 'items-end' : ''}`}
+                      >
+                        <span className="px-1 text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{m.fromName}</span>
+                          <span className="tabular-nums"> · {formatTime(m.timestamp)}</span>
+                        </span>
+                        <div
+                          className={
+                            mine
+                              ? 'rounded-md rounded-tr-sm bg-primary px-3 py-2 text-sm leading-relaxed text-primary-foreground'
+                              : 'rounded-md rounded-tl-sm bg-muted px-3 py-2 text-sm leading-relaxed text-foreground'
+                          }
+                        >
+                          {m.content}
+                        </div>
+                      </div>
+                      {mine && (
+                        <Avatar className="mt-1 h-8 w-8 shrink-0">
+                          <AvatarFallback className="text-xs">
+                            {initials(m.fromName)}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </div>
-
-            <div className="message-wrapper other">
-              <Avatar className="h-8 w-8 shrink-0 mt-1"><AvatarImage src="https://i.pravatar.cc/150?u=rachel" /></Avatar>
-              <div className="message-content">
-                <span className="time">14:34</span>
-                <div className="bubble">
-                  Sure thing! I've saved some for you.
-                </div>
+            ) : (
+              <div className="flex h-full min-h-[180px] flex-col items-center justify-center gap-3 text-center">
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                  <MessageSquare size={20} strokeWidth={1.5} />
+                </span>
+                <p className="max-w-prose text-sm text-muted-foreground">
+                  {activeSession
+                    ? 'No messages yet. Start the conversation.'
+                    : 'Chat opens when a live class is in session.'}
+                </p>
               </div>
-            </div>
-
-            <div className="message-wrapper self">
-              <div className="message-content">
-                <span className="time">14:35</span>
-                <div className="bubble self-bubble">
-                  That's awesome! Thanks!
-                </div>
-              </div>
-              <Avatar className="h-8 w-8 shrink-0 mt-1"><AvatarImage src="https://i.pravatar.cc/150?u=me" /></Avatar>
-            </div>
+            )}
           </ScrollArea>
-          
-          <div className="chat-input-area">
-            <div className="typing-indicator text-xs text-slate-400 mb-2 italic">Mike is typing...</div>
-            <div className="input-box">
-              <button className="icon-btn"><Paperclip size={18} /></button>
-              <button className="icon-btn"><Smile size={18} /></button>
-              <input type="text" placeholder="Type a message..." className="flex-1 bg-transparent border-none outline-none text-sm px-2" />
-              <button className="icon-btn text-purple-600"><Send size={18} fill="currentColor" /></button>
+
+          <form onSubmit={handleSend} className="mt-4">
+            <div className="flex items-center gap-1 rounded-md border border-input bg-background p-1.5 transition-colors focus-within:border-ring focus-within:ring-1 focus-within:ring-ring">
+              <Input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                disabled={!activeSession}
+                placeholder={
+                  activeSession ? 'Type a message…' : 'No active session'
+                }
+                aria-label="Message"
+                className="h-8 flex-1 border-none bg-transparent px-2 shadow-none focus-visible:ring-0"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                className="h-8 w-8"
+                disabled={!activeSession || !draft.trim()}
+                aria-label="Send message"
+              >
+                <Send size={18} />
+              </Button>
             </div>
-          </div>
-        </div>
+          </form>
+        </section>
       </div>
 
-      <div className="bottom-section">
-        {/* Content Column */}
-        <div className="bottom-col">
-          <h3 className="font-bold text-[#1e1e2d] mb-4">Content</h3>
-          <div className="content-timeline">
-            <div className="timeline-item">
-              <div className="timeline-icon bg-yellow-100 text-yellow-600"><Folder size={16} /></div>
-              <div className="timeline-text flex-1 font-semibold text-sm">Introduction</div>
-              <div className="timeline-time text-xs text-slate-400">2 min</div>
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {/* Class materials */}
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Class materials</h3>
+          {classMaterials.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {classMaterials.map((material) => {
+                const Icon = materialIcon(material.type);
+                return (
+                  <li
+                    key={material.id}
+                    className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <Icon size={16} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">
+                        {material.title}
+                      </p>
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                        {material.type}
+                      </p>
+                    </div>
+                    {material.size && (
+                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                        {material.size}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <FolderOpen size={20} strokeWidth={1.5} />
+              </span>
+              <p className="text-sm text-muted-foreground">No materials for this class yet.</p>
             </div>
-            <div className="timeline-item">
-              <div className="timeline-icon bg-green-100 text-green-600"><ImageIcon size={16} /></div>
-              <div className="timeline-text flex-1 font-semibold text-sm">Landing Page</div>
-              <div className="timeline-time text-xs text-slate-400">15 min</div>
-            </div>
-            <div className="timeline-item">
-              <div className="timeline-icon bg-blue-100 text-blue-600"><Lock size={16} /></div>
-              <div className="timeline-text flex-1 font-semibold text-sm">Login & Signup</div>
-              <div className="timeline-time text-xs text-slate-400">20 min</div>
-            </div>
-            <div className="timeline-item">
-              <div className="timeline-icon bg-orange-100 text-orange-600"><UserPlus size={16} /></div>
-              <div className="timeline-text flex-1 font-semibold text-sm text-slate-400">User Onboarding</div>
-              <div className="timeline-time text-xs text-slate-400">18 min</div>
-            </div>
-          </div>
-        </div>
+          )}
+        </section>
 
-        {/* Resources Column */}
-        <div className="bottom-col">
-          <h3 className="font-bold text-[#1e1e2d] mb-4">Resources</h3>
-          <div className="resources-list">
-            <div className="resource-item">
-              <div className="resource-number">01</div>
-              <div className="resource-info">
-                <div className="font-semibold text-sm">LP Design inspirations</div>
-                <div className="text-xs text-slate-400">100+ real cases</div>
-              </div>
-              <button className="share-btn"><Share size={14} /></button>
+        {/* Participants */}
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Participants</h3>
+          {participants.length > 0 ? (
+            <ul className="flex flex-col gap-2">
+              {participants.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex items-center gap-3 rounded-md border border-transparent p-2 transition-colors hover:border-border hover:bg-accent"
+                >
+                  <Avatar className="h-9 w-9 shrink-0">
+                    <AvatarFallback className="text-xs">{initials(p.name)}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{p.name}</p>
+                    {p.role && (
+                      <p className="text-xs text-muted-foreground">{p.role}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Users size={20} strokeWidth={1.5} />
+              </span>
+              <p className="text-sm text-muted-foreground">
+                {activeSession
+                  ? 'No one has joined this session yet.'
+                  : 'Participants appear when a class is live.'}
+              </p>
             </div>
-            <div className="resource-item">
-              <div className="resource-number">02</div>
-              <div className="resource-info">
-                <div className="font-semibold text-sm">Mobile Design Patterns</div>
-                <div className="text-xs text-slate-400">Best practices used worldwide</div>
-              </div>
-              <button className="share-btn"><Share size={14} /></button>
-            </div>
-            <div className="resource-item">
-              <div className="resource-number bg-purple-100 text-purple-600">03</div>
-              <div className="resource-info">
-                <div className="font-semibold text-sm">Micro-interactions</div>
-                <div className="text-xs text-slate-400">200 inspirational designs</div>
-              </div>
-              <button className="share-btn"><Share size={14} /></button>
-            </div>
-            <div className="resource-item">
-              <div className="resource-number">04</div>
-              <div className="resource-info">
-                <div className="font-semibold text-sm">How to increase website conversion</div>
-                <div className="text-xs text-slate-400">Practical advices</div>
-              </div>
-              <button className="share-btn"><Share size={14} /></button>
-            </div>
-          </div>
-        </div>
+          )}
+        </section>
 
-        {/* Previous Class Records Column */}
-        <div className="bottom-col">
-          <h3 className="font-bold text-[#1e1e2d] mb-4">Previous class records</h3>
-          <div className="records-list">
-            <div className="record-item">
-              <div className="record-thumb">
-                <img src="https://images.unsplash.com/photo-1542744173-8e7e53415bb0?q=80&w=2070&auto=format&fit=crop" alt="Thumb" />
-                <div className="play-overlay"><Play size={12} fill="currentColor" /></div>
-              </div>
-              <div className="record-info">
-                <div className="font-semibold text-sm">Design Accessibility</div>
-                <div className="text-xs text-slate-400 mt-1">05.01.2023</div>
-              </div>
-              <button className="bookmark-btn"><Bookmark size={16} /></button>
+        {/* Previous class records */}
+        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+          <h3 className="mb-4 text-lg font-semibold text-foreground">Previous class records</h3>
+          {previousRecords.length > 0 ? (
+            <ul className="flex flex-col gap-3">
+              {previousRecords.map((record, i) => (
+                <li key={`${record.id || record.title}-${i}`} className="flex items-center gap-3">
+                  <div className="relative flex h-[60px] w-[90px] shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-navy">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-card/90 text-foreground">
+                      <Play size={12} fill="currentColor" />
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">{record.title}</p>
+                    <p className="mt-1 flex items-center gap-2 text-xs tabular-nums text-muted-foreground">
+                      <span>{formatDate(record.endTime)}</span>
+                      {record.duration && (
+                        <>
+                          <span aria-hidden className="text-border">·</span>
+                          <span>{record.duration}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 py-8 text-center">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <History size={20} strokeWidth={1.5} />
+              </span>
+              <p className="text-sm text-muted-foreground">No past recordings yet.</p>
             </div>
-            <div className="record-item">
-              <div className="record-thumb">
-                <img src="https://images.unsplash.com/photo-1573164574572-cb89e39749b4?q=80&w=2069&auto=format&fit=crop" alt="Thumb" />
-                <div className="play-overlay"><Play size={12} fill="currentColor" /></div>
-              </div>
-              <div className="record-info">
-                <div className="font-semibold text-sm">UX Research</div>
-                <div className="text-xs text-slate-400 mt-1">04.01.2023</div>
-              </div>
-              <button className="bookmark-btn"><Bookmark size={16} /></button>
-            </div>
-            <div className="record-item">
-              <div className="record-thumb">
-                <img src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=2070&auto=format&fit=crop" alt="Thumb" />
-                <div className="play-overlay"><Play size={12} fill="currentColor" /></div>
-              </div>
-              <div className="record-info">
-                <div className="font-semibold text-sm">Wireframing</div>
-                <div className="text-xs text-slate-400 mt-1">04.01.2023</div>
-              </div>
-              <button className="bookmark-btn"><Bookmark size={16} /></button>
-            </div>
-          </div>
-        </div>
+          )}
+        </section>
       </div>
-
-      <style jsx>{`
-        .live-class-page {
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-          height: 100%;
-        }
-
-        .page-header {
-          margin-bottom: 0.5rem;
-        }
-
-        .top-section {
-          display: grid;
-          grid-template-columns: 2.2fr 1fr;
-          gap: 2rem;
-          min-height: 400px;
-        }
-
-        /* ── Video Player Area ── */
-        .video-container {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-
-        .video-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .live-badge {
-          background: #ff4757;
-          color: white;
-          padding: 0.2rem 0.6rem;
-          border-radius: 12px;
-          font-size: 0.7rem;
-          font-weight: 700;
-          display: flex;
-          align-items: center;
-          gap: 0.3rem;
-          text-transform: uppercase;
-        }
-
-        .live-dot {
-          width: 6px;
-          height: 6px;
-          background: white;
-          border-radius: 50%;
-          animation: pulse 1.5s infinite;
-        }
-
-        .avatar-group {
-          display: flex;
-          align-items: center;
-        }
-
-        .avatar-group > * {
-          position: relative;
-        }
-
-        .video-player-wrapper {
-          position: relative;
-          width: 100%;
-          height: 380px;
-          border-radius: 20px;
-          overflow: hidden;
-          background: #000;
-        }
-
-        .video-poster {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .video-controls {
-          position: absolute;
-          bottom: 1.5rem;
-          left: 1.5rem;
-          right: 1.5rem;
-          background: rgba(255, 255, 255, 0.2);
-          backdrop-filter: blur(8px);
-          border-radius: 12px;
-          padding: 0.75rem 1.25rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .control-btn {
-          color: white;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          opacity: 0.9;
-          transition: opacity 0.2s;
-        }
-
-        .control-btn:hover {
-          opacity: 1;
-        }
-
-        /* ── Group Chat ── */
-        .chat-container {
-          display: flex;
-          flex-direction: column;
-          height: 100%;
-        }
-
-        .chat-messages {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          gap: 1.5rem;
-          padding-right: 1rem;
-          margin-bottom: 1rem;
-        }
-
-        .message-wrapper {
-          display: flex;
-          gap: 0.75rem;
-          align-items: flex-start;
-          margin-bottom: 1rem;
-        }
-
-        .message-wrapper.self {
-          justify-content: flex-end;
-        }
-
-        .message-content {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-          max-width: 80%;
-        }
-
-        .message-wrapper.self .message-content {
-          align-items: flex-end;
-        }
-
-        .time {
-          font-size: 0.65rem;
-          color: #94a3b8;
-          padding: 0 0.25rem;
-        }
-
-        .bubble {
-          padding: 0.75rem 1rem;
-          border-radius: 14px;
-          font-size: 0.85rem;
-          line-height: 1.4;
-          background: #f1f5f9;
-          color: #334155;
-          border-top-left-radius: 4px;
-        }
-
-        .self-bubble {
-          background: #e0e7ff;
-          color: #3730a3;
-          border-top-left-radius: 14px;
-          border-top-right-radius: 4px;
-        }
-
-        .chat-input-area {
-          margin-top: auto;
-        }
-
-        .input-box {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          background: #f8fafc;
-          border: 1px solid #e2e8f0;
-          padding: 0.5rem;
-          border-radius: 12px;
-        }
-
-        .icon-btn {
-          color: #94a3b8;
-          padding: 0.4rem;
-          border-radius: 8px;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .icon-btn:hover {
-          background: #e2e8f0;
-          color: #475569;
-        }
-
-        /* ── Bottom Section ── */
-        .bottom-section {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          gap: 2rem;
-          margin-top: 1rem;
-        }
-
-        .bottom-col {
-          display: flex;
-          flex-direction: column;
-        }
-
-        /* Content Timeline */
-        .content-timeline {
-          display: flex;
-          flex-direction: column;
-          gap: 1.25rem;
-          position: relative;
-        }
-
-        .content-timeline::before {
-          content: '';
-          position: absolute;
-          left: 15px;
-          top: 30px;
-          bottom: 20px;
-          width: 1px;
-          background: #e2e8f0;
-          z-index: 0;
-        }
-
-        .timeline-item {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          position: relative;
-          z-index: 1;
-        }
-
-        .timeline-icon {
-          width: 32px;
-          height: 32px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background: white;
-          border: 2px solid white;
-        }
-
-        /* Resources List */
-        .resources-list {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-
-        .resource-item {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-          padding: 0.75rem;
-          border-radius: 12px;
-          background: #f8fafc;
-          transition: background 0.2s;
-        }
-
-        .resource-item:hover {
-          background: #f1f5f9;
-        }
-
-        .resource-number {
-          width: 36px;
-          height: 36px;
-          border-radius: 10px;
-          background: #e2e8f0;
-          color: #64748b;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 700;
-          font-size: 0.85rem;
-        }
-
-        .resource-info {
-          flex: 1;
-        }
-
-        .share-btn {
-          color: #94a3b8;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          padding: 0.5rem;
-        }
-        .share-btn:hover { color: #64748b; }
-
-        /* Records List */
-        .records-list {
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-
-        .record-item {
-          display: flex;
-          align-items: center;
-          gap: 1rem;
-        }
-
-        .record-thumb {
-          width: 90px;
-          height: 60px;
-          border-radius: 8px;
-          overflow: hidden;
-          position: relative;
-        }
-
-        .record-thumb img {
-          width: 100%;
-          height: 100%;
-          object-fit: cover;
-        }
-
-        .play-overlay {
-          position: absolute;
-          inset: 0;
-          background: rgba(0,0,0,0.3);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-        }
-
-        .play-overlay > * {
-          background: rgba(255,255,255,0.2);
-          padding: 0.4rem;
-          border-radius: 50%;
-          backdrop-filter: blur(4px);
-        }
-
-        .record-info {
-          flex: 1;
-        }
-
-        .bookmark-btn {
-          color: #cbd5e1;
-          background: transparent;
-          border: none;
-          cursor: pointer;
-          padding: 0.5rem;
-        }
-        .bookmark-btn:hover { color: #94a3b8; }
-
-        @media (max-width: 1024px) {
-          .top-section {
-            grid-template-columns: 1fr;
-          }
-          .bottom-section {
-            grid-template-columns: 1fr;
-          }
-        }
-      `}</style>
     </div>
   );
 }

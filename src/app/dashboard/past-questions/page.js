@@ -1,128 +1,322 @@
 "use client";
 
 import { useStore } from '@/store/useStore';
-import { useState } from 'react';
-import { Archive, ChevronDown, ChevronUp, BookOpen } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Archive, Search, Eye, Download, FileText, FilterX, ListChecks } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem } from '@/components/ui/select';
+
+const SEMESTER_LABEL = { '1st': '1st semester', '2nd': '2nd semester' };
+const EXAM_LABEL = { mid: 'Mid-semester', final: 'Final exam' };
+
+// Resolve a usable href for a past-question resource: an external URL is
+// preferred; otherwise fall back to an inline base64 data URL.
+function resourceHref(url, data) {
+  if (url && url.trim()) return url.trim();
+  if (data) return data;
+  return null;
+}
 
 export default function PastQuestions() {
-  const { user, courses, pastQuestions } = useStore();
+  const getPastQuestions = useStore((s) => s.getPastQuestions);
+  // Subscribe to the array itself so the view re-renders on visibility changes.
+  const pastQuestions = useStore((s) => s.pastQuestions);
+
+  const [search, setSearch] = useState('');
   const [filterCourse, setFilterCourse] = useState('all');
-  const [expanded, setExpanded] = useState({});
+  const [filterYear, setFilterYear] = useState('all');
+  const [filterSemester, setFilterSemester] = useState('all');
+  const [filterExam, setFilterExam] = useState('all');
 
-  const myCourses = courses.filter(c => c.level === user?.level);
-  const myCourseIds = myCourses.map(c => c.id);
+  // Cross-department: all visible records, newest-first. We read `pastQuestions`
+  // so the memo recomputes whenever a record is added or its visibility flips.
+  const all = useMemo(() => {
+    void pastQuestions;
+    return getPastQuestions();
+  }, [getPastQuestions, pastQuestions]);
 
-  const filtered = (filterCourse === 'all' ? pastQuestions : pastQuestions.filter(p => p.courseId === parseInt(filterCourse)))
-    .filter(pq => myCourseIds.includes(pq.courseId));
+  // Distinct option lists derived from the live archive.
+  const courseOptions = useMemo(() => {
+    const map = new Map();
+    all.forEach((p) => {
+      if (p.courseCode && !map.has(p.courseCode)) map.set(p.courseCode, p.courseTitle || '');
+    });
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [all]);
 
-  const toggle = (id) => setExpanded(e => ({ ...e, [id]: !e[id] }));
+  const yearOptions = useMemo(
+    () => [...new Set(all.map((p) => p.year).filter(Boolean))].sort().reverse(),
+    [all]
+  );
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return all.filter((p) => {
+      if (filterCourse !== 'all' && p.courseCode !== filterCourse) return false;
+      if (filterYear !== 'all' && p.year !== filterYear) return false;
+      if (filterSemester !== 'all' && p.semester !== filterSemester) return false;
+      if (filterExam !== 'all' && p.examType !== filterExam) return false;
+      if (q) {
+        const hay = `${p.courseCode || ''} ${p.courseTitle || ''}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [all, search, filterCourse, filterYear, filterSemester, filterExam]);
+
+  const hasActiveFilters =
+    search.trim() !== '' ||
+    filterCourse !== 'all' ||
+    filterYear !== 'all' ||
+    filterSemester !== 'all' ||
+    filterExam !== 'all';
+
+  const clearFilters = () => {
+    setSearch('');
+    setFilterCourse('all');
+    setFilterYear('all');
+    setFilterSemester('all');
+    setFilterExam('all');
+  };
+
+  // Group by year (desc) then by semester (1st before 2nd) for an archive feel.
+  const grouped = useMemo(() => {
+    const byYear = new Map();
+    filtered.forEach((p) => {
+      const year = p.year || 'Undated';
+      if (!byYear.has(year)) byYear.set(year, new Map());
+      const sem = byYear.get(year);
+      const key = p.semester === '2nd' ? '2nd' : '1st';
+      if (!sem.has(key)) sem.set(key, []);
+      sem.get(key).push(p);
+    });
+    const years = [...byYear.keys()].sort((a, b) => String(b).localeCompare(String(a)));
+    return years.map((year) => {
+      const semMap = byYear.get(year);
+      const semesters = ['1st', '2nd']
+        .filter((k) => semMap.has(k))
+        .map((k) => ({ key: k, items: semMap.get(k) }));
+      return { year, semesters };
+    });
+  }, [filtered]);
 
   return (
-    <div className="page-container animate-fade-in">
-      <div className="page-header">
-        <div>
-          <h2>Past Questions</h2>
-          <p>Review previous exam and test questions to prepare for your assessments.</p>
-        </div>
-      </div>
+    <div className="space-y-6 animate-fade-in">
+      <header>
+        <h2 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+          Past questions
+        </h2>
+        <p className="mt-1 text-sm leading-relaxed text-muted-foreground max-w-prose text-pretty">
+          Browse previous exams and tests from across every department. Preview or download a paper to
+          prepare for your assessments.
+        </p>
+      </header>
 
-      {/* Filter */}
-      <div className="filter-bar glass-panel">
-        <BookOpen size={15} />
-        <span>Filter by Course:</span>
-        <div className="filter-pills">
-          <button className={`pill ${filterCourse === 'all' ? 'active' : ''}`} onClick={() => setFilterCourse('all')}>All Level Courses</button>
-          {myCourses.map(c => (
-            <button key={c.id} className={`pill ${filterCourse === String(c.id) ? 'active' : ''}`} onClick={() => setFilterCourse(String(c.id))} style={filterCourse === String(c.id) ? { background: c.color, borderColor: c.color } : {}}>
-              {c.code}
-            </button>
+      {/* Filters */}
+      <section className="space-y-4 rounded-xl border border-border bg-card p-4 text-card-foreground sm:p-5">
+        <div className="relative">
+          <Search
+            size={16}
+            strokeWidth={1.5}
+            aria-hidden="true"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by course code or title"
+            aria-label="Search past questions"
+            className="h-11 pl-9"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Course</span>
+            <Select value={filterCourse} onValueChange={setFilterCourse}>
+              <SelectContent>
+                <SelectItem value="all">All courses</SelectItem>
+                {courseOptions.map(([code]) => (
+                  <SelectItem key={code} value={code}>
+                    {code}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Academic year</span>
+            <Select value={filterYear} onValueChange={setFilterYear}>
+              <SelectContent>
+                <SelectItem value="all">All years</SelectItem>
+                {yearOptions.map((y) => (
+                  <SelectItem key={y} value={y}>
+                    {y}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Semester</span>
+            <Select value={filterSemester} onValueChange={setFilterSemester}>
+              <SelectContent>
+                <SelectItem value="all">All semesters</SelectItem>
+                <SelectItem value="1st">1st semester</SelectItem>
+                <SelectItem value="2nd">2nd semester</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Exam type</span>
+            <Select value={filterExam} onValueChange={setFilterExam}>
+              <SelectContent>
+                <SelectItem value="all">All types</SelectItem>
+                <SelectItem value="mid">Mid-semester</SelectItem>
+                <SelectItem value="final">Final exam</SelectItem>
+              </SelectContent>
+            </Select>
+          </label>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {filtered.length} paper{filtered.length !== 1 ? 's' : ''}
+            {hasActiveFilters && all.length !== filtered.length ? ` of ${all.length}` : ''}
+          </span>
+          {hasActiveFilters && (
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <FilterX size={16} strokeWidth={1.5} />
+              Clear filters
+            </Button>
+          )}
+        </div>
+      </section>
+
+      {/* Archive */}
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-border bg-card px-6 py-16 text-center">
+          <Archive size={40} strokeWidth={1.5} className="text-muted-foreground" aria-hidden="true" />
+          <p className="text-sm text-muted-foreground max-w-prose text-pretty">
+            {all.length === 0
+              ? 'No past questions have been published yet. Check back soon.'
+              : 'No past questions match your filters.'}
+          </p>
+          {hasActiveFilters && all.length > 0 && (
+            <Button variant="outline" size="sm" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {grouped.map(({ year, semesters }) => (
+            <section key={year} className="space-y-4">
+              <div className="flex items-center gap-3">
+                <h3 className="text-lg font-semibold text-foreground tabular-nums">{year}</h3>
+                <span className="h-px flex-1 bg-border" aria-hidden="true" />
+              </div>
+
+              {semesters.map(({ key, items }) => (
+                <div key={key} className="space-y-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {SEMESTER_LABEL[key]}
+                  </p>
+                  <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {items.map((pq) => (
+                      <PastQuestionCard key={pq.id} pq={pq} />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+function PastQuestionCard({ pq }) {
+  const href = resourceHref(pq.url, pq.fileData);
+  const schemeHref = resourceHref(pq.answerSchemeUrl, pq.answerSchemeData);
+  const showScheme = pq.answerSchemeVisible && !!schemeHref;
+  const downloadName = pq.fileName || `${pq.courseCode || 'past-question'}-${pq.year || ''}`.trim();
+  const schemeName = pq.answerSchemeName || `${pq.courseCode || 'answer-scheme'}-scheme`;
+
+  return (
+    <li className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground transition-colors hover:border-primary/40">
+      <div className="flex items-start gap-3">
+        <span
+          className="mt-0.5 flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground"
+          aria-hidden="true"
+        >
+          <FileText size={18} strokeWidth={1.5} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">{pq.courseCode}</p>
+          {pq.courseTitle && (
+            <p className="mt-0.5 text-sm text-muted-foreground text-pretty">{pq.courseTitle}</p>
+          )}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="rounded-md border-border bg-transparent text-muted-foreground">
+              {pq.year}
+            </Badge>
+            <Badge variant="outline" className="rounded-md border-border bg-transparent text-muted-foreground">
+              {SEMESTER_LABEL[pq.semester === '2nd' ? '2nd' : '1st']}
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`rounded-md border-transparent ${
+                pq.examType === 'mid' ? 'bg-info/10 text-info' : 'bg-brand-green-soft text-brand-green'
+              }`}
+            >
+              {EXAM_LABEL[pq.examType === 'mid' ? 'mid' : 'final']}
+            </Badge>
+          </div>
+        </div>
       </div>
 
-      {/* Past Questions */}
-      <div className="pq-list">
-        {filtered.length === 0 ? (
-          <div className="empty-full glass-panel"><Archive size={40} /><p>No past questions available for this course yet.</p></div>
+      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
+        {href ? (
+          <>
+            <Button asChild variant="outline" size="sm">
+              <a href={href} target="_blank" rel="noopener noreferrer">
+                <Eye size={16} strokeWidth={1.5} />
+                Preview
+              </a>
+            </Button>
+            <Button asChild size="sm">
+              <a href={href} download={pq.fileData ? downloadName : undefined} target="_blank" rel="noopener noreferrer">
+                <Download size={16} strokeWidth={1.5} />
+                Download
+              </a>
+            </Button>
+          </>
         ) : (
-          filtered.map(pq => {
-            const course = courses.find(c => c.id === pq.courseId);
-            const isOpen = expanded[pq.id];
-            return (
-              <div key={pq.id} className="pq-card glass-panel">
-                <div className="pq-header" onClick={() => toggle(pq.id)}>
-                  <div className="pq-header-left">
-                    <div className="pq-accent" style={{ background: course?.color }}></div>
-                    <div className="pq-meta">
-                      {course && <span className="course-tag" style={{ background: course.color + '22', color: course.color }}>{course.code} — {course.title}</span>}
-                      <div className="pq-details">
-                        <span className="pq-year">📅 {pq.year}</span>
-                        <span className="pq-semester">{pq.semester} Semester</span>
-                        <span className={`pq-type ${pq.type.toLowerCase()}`}>{pq.type}</span>
-                        <span className="pq-count">{pq.questions.length} question{pq.questions.length !== 1 ? 's' : ''}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <button className="expand-btn">
-                    {isOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </button>
-                </div>
+          <span className="text-xs text-muted-foreground">No file attached</span>
+        )}
 
-                {isOpen && (
-                  <div className="pq-body">
-                    <ol className="question-list">
-                      {pq.questions.map((q, idx) => (
-                        <li key={idx} className="question-item">
-                          <span className="q-num-badge">{idx + 1}</span>
-                          <p>{q}</p>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-              </div>
-            );
-          })
+        {showScheme && (
+          <Button asChild variant="ghost" size="sm">
+            <a
+              href={schemeHref}
+              download={pq.answerSchemeData ? schemeName : undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <ListChecks size={16} strokeWidth={1.5} />
+              Answer scheme
+            </a>
+          </Button>
         )}
       </div>
-
-      <style jsx>{`
-        .page-container { display: flex; flex-direction: column; gap: 1.5rem; }
-        .page-header h2 { font-size: 1.4rem; color: var(--text-main); margin-bottom: 0.2rem; }
-        .page-header p { color: var(--text-muted); font-size: 0.9rem; }
-
-        .filter-bar { padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.85rem; flex-wrap: wrap; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); }
-        .filter-pills { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-        .pill { padding: 0.3rem 0.85rem; border-radius: 20px; border: 1px solid var(--card-border); background: transparent; color: var(--text-muted); font-size: 0.8rem; font-weight: 600; cursor: pointer; transition: all 0.2s; }
-        .pill.active { background: var(--primary); color: white; border-color: var(--primary); }
-        .pill:hover:not(.active) { border-color: var(--primary); color: var(--primary); }
-
-        .pq-list { display: flex; flex-direction: column; gap: 0.85rem; }
-        .pq-card { overflow: hidden; }
-        .pq-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; cursor: pointer; transition: background 0.2s; }
-        .pq-header:hover { background: rgba(0,0,0,0.02); }
-        [data-theme='dark'] .pq-header:hover { background: rgba(255,255,255,0.02); }
-        .pq-header-left { display: flex; align-items: center; gap: 1rem; flex: 1; min-width: 0; }
-        .pq-accent { width: 5px; height: 50px; border-radius: 3px; flex-shrink: 0; }
-        .pq-meta { display: flex; flex-direction: column; gap: 0.4rem; }
-        .course-tag { font-size: 0.78rem; font-weight: 700; padding: 0.15rem 0.55rem; border-radius: 4px; width: fit-content; }
-        .pq-details { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-        .pq-year, .pq-semester, .pq-count { font-size: 0.8rem; color: var(--text-muted); }
-        .pq-type { font-size: 0.72rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 4px; }
-        .pq-type.theory { background: rgba(15,82,186,0.1); color: #0f52ba; }
-        .pq-type.practical { background: rgba(130,65,249,0.1); color: #8241f9; }
-        .expand-btn { background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 0.5rem; border-radius: 6px; transition: all 0.2s; display: flex; align-items: center; flex-shrink: 0; }
-        .expand-btn:hover { background: var(--nav-active); }
-
-        .pq-body { padding: 0 1.5rem 1.5rem 1.5rem; border-top: 1px solid var(--card-border); padding-top: 1.25rem; animation: slideDown 0.2s ease-out; }
-        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-        .question-list { list-style: none; display: flex; flex-direction: column; gap: 1rem; }
-        .question-item { display: flex; align-items: flex-start; gap: 1rem; }
-        .q-num-badge { width: 28px; height: 28px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; flex-shrink: 0; margin-top: 0.1rem; }
-        .question-item p { font-size: 0.92rem; color: var(--text-main); line-height: 1.6; flex: 1; }
-
-        .empty-full { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; padding: 4rem; color: var(--text-muted); text-align: center; }
-      `}</style>
-    </div>
+    </li>
   );
 }

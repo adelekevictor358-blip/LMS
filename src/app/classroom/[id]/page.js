@@ -3,60 +3,90 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStore } from '@/store/useStore';
-import { 
-  Mic, MicOff, Video, VideoOff, PhoneOff, ScreenShare, 
-  MessageSquare, Users, Settings, Hand, Smile, Send, X,
-  Maximize2, Volume2, Shield, MoreVertical
+import {
+  Video, PhoneOff, MessageSquare, Send, X, Shield, Lock,
+  Loader2, CalendarClock
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+
+const JITSI_DOMAIN = 'meet.jit.si';
+const JITSI_SCRIPT_SRC = 'https://meet.jit.si/external_api.js';
+
+// Build a Jitsi-safe room slug from the session id: literal MTU- prefix
+// plus the id stripped of every unsafe (non-alphanumeric) character.
+function toRoomName(sessionId) {
+  const safe = String(sessionId ?? '').replace(/[^a-zA-Z0-9]/g, '');
+  return `MTU-${safe}`;
+}
+
+// SSR-safe loader for the Jitsi external API script.
+function loadJitsiScript() {
+  if (typeof window === 'undefined') return Promise.reject(new Error('no window'));
+  if (window.JitsiMeetExternalAPI) return Promise.resolve(window.JitsiMeetExternalAPI);
+  if (window.__jitsiLoaderPromise) return window.__jitsiLoaderPromise;
+
+  window.__jitsiLoaderPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${JITSI_SCRIPT_SRC}"]`);
+    const onReady = () => {
+      if (window.JitsiMeetExternalAPI) resolve(window.JitsiMeetExternalAPI);
+      else reject(new Error('Jitsi API unavailable'));
+    };
+    if (existing) {
+      existing.addEventListener('load', onReady);
+      existing.addEventListener('error', reject);
+      if (window.JitsiMeetExternalAPI) onReady();
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = JITSI_SCRIPT_SRC;
+    script.async = true;
+    script.onload = onReady;
+    script.onerror = reject;
+    document.body.appendChild(script);
+  });
+  return window.__jitsiLoaderPromise;
+}
 
 export default function VirtualClassroom() {
   const router = useRouter();
   const { id } = useParams();
-  const { user, liveSessions, endLiveSession } = useStore();
-  const currentSession = liveSessions.find(s => s.id === id);
-  
-  const [isMuted, setIsMuted] = useState(false);
-  const [isCamOff, setIsCamOff] = useState(false);
+  const {
+    user, liveSessions, endLiveSession, getSessionStatus,
+    recordAttendanceJoin, recordAttendanceLeave,
+    sendSessionMessage, sessionMessages
+  } = useStore();
+
+  const session = liveSessions.find(s => s.id === id);
+  // Preserve the session locally so an in-call participant sees an "ended"
+  // screen (not "not found") once a lecturer ends and removes it.
+  const sessionRef = useRef(null);
+  if (session) sessionRef.current = session;
+  const localSession = session || sessionRef.current;
+  // Invite-link / guest join: if THIS browser's local store doesn't have the
+  // session (data is per-machine) but we have a room id, still let the user into
+  // the real Jitsi room so live classes work across different systems/devices.
+  const isGuestJoin = !localSession && !!id;
+  const currentSession = localSession || (isGuestJoin ? { id, title: 'Live class', participants: [], isGuest: true } : null);
+
   const [showChat, setShowChat] = useState(true);
   const [message, setMessage] = useState('');
-  const [localStream, setLocalStream] = useState(null);
-  const videoRef = useRef(null);
-
   const [liveClock, setLiveClock] = useState('');
+  const [embedError, setEmbedError] = useState(false);
+  const [endedInCall, setEndedInCall] = useState(false);
 
-  const [chatLog, setChatLog] = useState([
-    { user: 'System', text: 'Connection secure. Recording enabled.' },
-    { user: 'Prof. Marcus Chen', text: 'Welcome everyone! Please mute your mics as you join.' }
-  ]);
+  const jitsiContainerRef = useRef(null);
+  const apiRef = useRef(null);
+  const attendanceJoinedRef = useRef(false);
+  const chatEndRef = useRef(null);
 
-  useEffect(() => {
-    // Capture stream in a local variable so the cleanup closure
-    // always has the real reference (avoids stale-state bug).
-    let activeStream = null;
+  const currentSessionMessages = sessionMessages.filter(m => m.sessionId === id);
 
-    async function startCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        activeStream = stream;
-        setLocalStream(stream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-        }
-      } catch (err) {
-        console.error("Camera access denied:", err);
-      }
-    }
-    startCamera();
+  const status = localSession ? getSessionStatus(localSession) : (isGuestJoin ? 'live' : 'ended');
+  const isEnded = (!currentSession && user?.role !== 'admin') || status === 'ended' || endedInCall;
+  const canEmbed = !!currentSession && status === 'live' && !endedInCall;
 
-    return () => {
-      // Use the local variable — localStream state would always be null here
-      if (activeStream) {
-        activeStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // ─── Live clock ───
   useEffect(() => {
     const tick = () => setLiveClock(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     tick();
@@ -64,30 +94,114 @@ export default function VirtualClassroom() {
     return () => clearInterval(t);
   }, []);
 
-  const toggleMic = () => {
-    if (localStream) {
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
+  // ─── Record attendance leave + dispose on unmount ───
+  useEffect(() => {
+    return () => {
+      if (attendanceJoinedRef.current && user?.id) {
+        recordAttendanceLeave(id, user.id);
+        attendanceJoinedRef.current = false;
       }
-    }
-  };
+      if (apiRef.current) {
+        try { apiRef.current.dispose(); } catch { /* noop */ }
+        apiRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const toggleCam = () => {
-    if (localStream) {
-      const videoTrack = localStream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsCamOff(!videoTrack.enabled);
+  // ─── Hard end-lock watcher: disconnect when endAt passes mid-call ───
+  useEffect(() => {
+    if (!canEmbed || !currentSession?.endAt) return;
+    const checkEnd = () => {
+      if (Date.now() > Date.parse(currentSession.endAt)) {
+        teardownCall();
+        setEndedInCall(true);
       }
+    };
+    checkEnd();
+    const t = setInterval(checkEnd, 5000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEmbed, currentSession?.endAt]);
+
+  // ─── Instantiate the real Jitsi meeting ───
+  useEffect(() => {
+    if (!canEmbed || !user) return;
+    let disposed = false;
+
+    loadJitsiScript()
+      .then((JitsiMeetExternalAPI) => {
+        if (disposed || !jitsiContainerRef.current || apiRef.current) return;
+
+        // Mark attendance only once we actually enter the live room.
+        if (!attendanceJoinedRef.current) {
+          recordAttendanceJoin(id, { userId: user.id, name: user.name, role: user.role });
+          attendanceJoinedRef.current = true;
+        }
+
+        const api = new JitsiMeetExternalAPI(JITSI_DOMAIN, {
+          roomName: toRoomName(id),
+          parentNode: jitsiContainerRef.current,
+          width: '100%',
+          height: '100%',
+          userInfo: { displayName: user.name },
+          configOverwrite: {
+            prejoinPageEnabled: false,
+            disableDeepLinking: true,
+            startWithAudioMuted: currentSession?.settings?.muteOnEntry ?? true,
+            startWithVideoMuted: false,
+          },
+          interfaceConfigOverwrite: {
+            SHOW_JITSI_WATERMARK: false,
+            SHOW_WATERMARK_FOR_GUESTS: false,
+            DEFAULT_BACKGROUND: '#09090b',
+          },
+        });
+
+        apiRef.current = api;
+        api.addEventListener('readyToClose', () => {
+          handleLeave();
+        });
+      })
+      .catch(() => {
+        if (!disposed) setEmbedError(true);
+      });
+
+    return () => {
+      disposed = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canEmbed, user]);
+
+  // ─── Dispose when the session ends remotely ───
+  useEffect(() => {
+    if (isEnded) teardownCall();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEnded]);
+
+  // Chat autoscroll
+  useEffect(() => {
+    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  }, [currentSessionMessages, showChat]);
+
+  const teardownCall = () => {
+    if (apiRef.current) {
+      try { apiRef.current.dispose(); } catch { /* noop */ }
+      apiRef.current = null;
+    }
+    if (attendanceJoinedRef.current && user?.id) {
+      recordAttendanceLeave(id, user.id);
+      attendanceJoinedRef.current = false;
     }
   };
 
   const handleLeave = () => {
+    teardownCall();
     if (user?.role === 'lecturer') {
       if (confirm("Ending the session will disconnect all students. Continue?")) {
         endLiveSession(id);
+        router.push('/lecturer');
+      } else {
         router.push('/lecturer');
       }
     } else {
@@ -95,353 +209,204 @@ export default function VirtualClassroom() {
     }
   };
 
-  const sendMessage = (e) => {
+  const handleSend = (e) => {
     e.preventDefault();
     if (!message.trim()) return;
-    setChatLog([...chatLog, { user: user?.name, text: message }]);
+    sendSessionMessage(id, message.trim());
     setMessage('');
   };
 
+  // ─── Session not found ───
   if (!currentSession && user?.role !== 'admin') {
     return (
-      <div className="error-screen">
-        <h2>Session Not Found</h2>
-        <p>This live class might have ended or the link is invalid.</p>
-        <button className="btn btn-primary" onClick={() => router.push('/')}>Return Home</button>
+      <div className="dark fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card">
+          <Video size={22} strokeWidth={1.5} className="text-muted-foreground" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="font-serif text-2xl font-semibold tracking-tight text-balance">Session not found</h2>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
+            This live class might have ended, or the link is no longer valid.
+          </p>
+        </div>
+        <Button onClick={() => router.push('/')}>Return home</Button>
+      </div>
+    );
+  }
+
+  // ─── Hard end-lock screen ───
+  if (isEnded) {
+    return (
+      <div className="dark fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card">
+          {endedInCall
+            ? <PhoneOff size={22} strokeWidth={1.5} className="text-muted-foreground" />
+            : <Lock size={22} strokeWidth={1.5} className="text-muted-foreground" />}
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="font-serif text-2xl font-semibold tracking-tight text-balance">
+            {endedInCall ? 'This session has ended' : 'This virtual class is closed'}
+          </h2>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
+            {endedInCall
+              ? 'This session has ended. You have been disconnected.'
+              : 'This virtual class is closed. You can no longer join this session.'}
+          </p>
+        </div>
+        <Button onClick={() => router.push(user?.role === 'lecturer' ? '/lecturer' : '/dashboard')}>
+          Back to dashboard
+        </Button>
+      </div>
+    );
+  }
+
+  // ─── Upcoming screen ───
+  if (status === 'upcoming') {
+    return (
+      <div className="dark fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4 bg-background px-6 text-center text-foreground">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-card">
+          <CalendarClock size={22} strokeWidth={1.5} className="text-muted-foreground" />
+        </div>
+        <div className="space-y-1.5">
+          <h2 className="font-serif text-2xl font-semibold tracking-tight text-balance">Not started yet</h2>
+          <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
+            {currentSession.title} opens at{' '}
+            {new Date(currentSession.startAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.
+          </p>
+        </div>
+        <Button onClick={() => router.push(user?.role === 'lecturer' ? '/lecturer' : '/dashboard')}>
+          Back to dashboard
+        </Button>
       </div>
     );
   }
 
   return (
-    <div className="classroom-wrapper">
-      {/* Top Bar */}
-      <div className="classroom-header">
-        <div className="session-info">
-          <div className="live-pill">LIVE</div>
-          <div className="divider"></div>
+    <div className="dark fixed inset-0 z-[9999] flex flex-col bg-background text-foreground animate-fade-in">
+      {/* Top bar */}
+      <header className="flex h-[70px] items-center justify-between border-b border-border px-6">
+        <div className="flex items-center gap-4">
+          <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-foreground">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            Live
+          </span>
+          <span className="h-7 w-px bg-border" />
           <div>
-            <h3>{currentSession?.title || "Virtual Lecture Session"}</h3>
-            <p>{currentSession?.lecturerName} · PHY104 Fundamentals</p>
+            <h3 className="font-sans text-sm font-semibold tracking-tight text-foreground">
+              {currentSession?.title || "Virtual lecture session"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {currentSession?.lecturerName}
+            </p>
           </div>
         </div>
-        <div className="header-controls">
-          <div className="recording-status">
-            <span className="dot"></span> REC 01:24:05
-          </div>
-          <button className="icon-btn"><Settings size={18} /></button>
-          <button className="icon-btn"><Shield size={18} /></button>
+        <div className="flex items-center gap-2">
+          {currentSession?.recording && (
+            <span className="mr-3 inline-flex items-center gap-2 text-xs font-medium tabular-nums text-muted-foreground">
+              <span className="h-1.5 w-1.5 rounded-full bg-destructive animate-pulse" />
+              Recording
+            </span>
+          )}
+          <span className="mr-1 text-xs font-medium tabular-nums text-muted-foreground">{liveClock}</span>
+          <Button variant="ghost" size="icon" aria-label="Security">
+            <Shield size={18} />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => setShowChat(s => !s)} aria-label="Toggle chat">
+            <MessageSquare size={18} />
+          </Button>
         </div>
-      </div>
+      </header>
 
-      <div className="main-stage">
-        {/* Video Grid */}
-        <div className={`video-grid ${showChat ? 'with-chat' : ''}`}>
-          {/* Main Speaker (Lecturer) */}
-          <div className="video-card main-speaker">
-            <div className="video-overlay">
-              <span>{user?.role === 'lecturer' ? `${user?.title} ${user?.name} (Host)` : (currentSession?.lecturerName || "Lecturer")}</span>
-            </div>
-            
-            {(user?.role === 'lecturer' && !isCamOff) ? (
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                muted={true}
-                className="live-video-feed"
-              />
-            ) : (
-              <div className="video-placeholder lecturer-view">
-                <div className="avatar-lg">
-                  {(user?.role === 'lecturer' ? user.avatar : (currentSession?.lecturerName?.charAt(0) || 'L'))}
-                </div>
-                <p>{isCamOff ? 'Camera is Off' : 'Host is presenting...'}</p>
+      <div className="flex flex-1 gap-4 overflow-hidden p-4">
+        {/* Real Jitsi embed in an immersive dark frame */}
+        <div className="relative flex-1 overflow-hidden rounded-xl border border-border bg-card">
+          {embedError ? (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 px-6 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background">
+                <Video size={22} strokeWidth={1.5} className="text-muted-foreground" />
               </div>
-            )}
-            
-            <div className="speaker-badges">
-              <div className="badge">{isMuted ? <MicOff size={14} /> : <Mic size={14} />}</div>
-            </div>
-          </div>
-
-          {/* Participants Grid */}
-          <div className="participants-sidebar">
-            {[1, 2, 3, 4, 5].map(i => (
-              <div key={i} className="video-card mini">
-                <div className="video-placeholder mini-v">
-                  <div className="avatar-sm">S{i}</div>
-                </div>
-                <div className="mini-name">Student {i}</div>
+              <div className="space-y-1.5">
+                <h2 className="font-sans text-lg font-semibold tracking-tight">Couldn&apos;t load the live room</h2>
+                <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
+                  The meeting service could not be reached. Check your connection and try again.
+                </p>
               </div>
-            ))}
-            <div className="video-card mini self">
-               <div className={`video-placeholder mini-v ${isCamOff ? 'cam-off' : ''}`}>
-                  {isCamOff ? (
-                    <div className="avatar-sm">{user?.avatar}</div>
-                  ) : (
-                    user?.role === 'student' ? (
-                      <video 
-                        ref={videoRef} 
-                        autoPlay 
-                        playsInline 
-                        muted={true}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '16px' }}
-                      />
-                    ) : (
-                      <div className="avatar-sm text-xs">Self View</div>
-                    )
-                  )}
-               </div>
-               <div className="mini-name">You {isMuted && <MicOff size={10} color="#ff4d4d" />}</div>
+              <Button onClick={() => { setEmbedError(false); if (typeof window !== 'undefined') window.location.reload(); }}>
+                Retry
+              </Button>
             </div>
-          </div>
+          ) : (
+            <>
+              <div ref={jitsiContainerRef} className="absolute inset-0 h-full w-full" />
+              {!apiRef.current && (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background">
+                  <Loader2 size={26} className="animate-spin text-muted-foreground" strokeWidth={1.5} />
+                  <p className="text-sm text-muted-foreground">Connecting you to the live room…</p>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
-        {/* Chat Sidebar */}
+        {/* Chat sidebar */}
         {showChat && (
-          <div className="chat-panel glass-panel">
-            <div className="panel-header">
-              <h3>In-call Messages</h3>
-              <button className="close-chat" onClick={() => setShowChat(false)}><X size={18} /></button>
-            </div>
-            <div className="chat-content">
-              {chatLog.map((c, i) => (
-                <div key={i} className="chat-msg">
-                  <span className="sender">{c.user}</span>
-                  <p className="txt">{c.text}</p>
+          <aside className="flex w-[350px] flex-col overflow-hidden rounded-xl border border-border bg-card">
+            <header className="flex items-center justify-between border-b border-border px-5 py-4">
+              <h3 className="font-sans text-sm font-semibold text-foreground">In-call messages</h3>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowChat(false)} aria-label="Close chat">
+                <X size={18} />
+              </Button>
+            </header>
+            <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-5">
+              {currentSessionMessages.length === 0 ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+                  <MessageSquare size={26} strokeWidth={1.5} className="text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">No messages yet. Start the conversation.</p>
                 </div>
-              ))}
+              ) : (
+                currentSessionMessages.map((m, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className={`text-xs font-semibold ${m.fromId === user?.id ? 'text-primary' : 'text-foreground'}`}>{m.fromName}</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">{new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <p className="rounded-md rounded-tl-none bg-muted px-3 py-2 text-sm leading-relaxed text-muted-foreground">{m.content}</p>
+                  </div>
+                ))
+              )}
+              <div ref={chatEndRef} />
             </div>
-            <form className="chat-entry" onSubmit={sendMessage}>
-              <input 
-                type="text" 
-                placeholder="Send a message to everyone" 
+            <form className="flex gap-2 border-t border-border p-3" onSubmit={handleSend}>
+              <Input
+                type="text"
+                placeholder="Send a message to everyone"
                 value={message}
                 onChange={e => setMessage(e.target.value)}
+                className="h-10"
               />
-              <button type="submit"><Send size={16} /></button>
+              <Button type="submit" size="icon" className="h-10 w-10 shrink-0" aria-label="Send message">
+                <Send size={16} />
+              </Button>
             </form>
-          </div>
+          </aside>
         )}
       </div>
 
-      {/* Control Bar */}
-      <div className="classroom-footer">
-        <div className="left-tools">
-          <div className="time-display" id="live-clock">{liveClock}</div>
-          <div className="divider"></div>
-          <button className="tool-btn" onClick={() => setShowChat(!showChat)}>
-            <MessageSquare size={20} />
-            {chatLog.length > 0 && <span className="notif-dot"></span>}
-          </button>
-          <button className="tool-btn"><Users size={20} /></button>
+      {/* Control bar */}
+      <footer className="flex h-[88px] items-center justify-between border-t border-border px-6">
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium tabular-nums text-muted-foreground">{liveClock}</span>
+          <span className="h-7 w-px bg-border" />
+          <span className="text-xs text-muted-foreground">
+            Live controls (mute, camera, share) are in the meeting toolbar.
+          </span>
         </div>
 
-        <div className="center-actions">
-          <button className={`action-circle ${isMuted ? 'off' : ''}`} onClick={toggleMic}>
-            {isMuted ? <MicOff size={22} /> : <Mic size={22} />}
-          </button>
-          <button className={`action-circle ${isCamOff ? 'off' : ''}`} onClick={toggleCam}>
-            {isCamOff ? <VideoOff size={22} /> : <Video size={22} />}
-          </button>
-          <button className="action-circle secondary"><Hand size={22} /></button>
-          <button className="action-circle secondary"><ScreenShare size={22} /></button>
-          <button className="action-circle secondary"><Smile size={22} /></button>
-          <button className="action-circle hang-up" onClick={handleLeave}>
-            <PhoneOff size={22} />
-          </button>
-        </div>
-
-        <div className="right-tools">
-           <button className="tool-btn"><Volume2 size={20} /></button>
-           <button className="tool-btn"><Maximize2 size={20} /></button>
-           <button className="tool-btn"><MoreVertical size={20} /></button>
-        </div>
-      </div>
-
-      <style jsx>{`
-        .classroom-wrapper {
-          position: fixed;
-          inset: 0;
-          background: #0a0a0b;
-          color: white;
-          display: flex;
-          flex-direction: column;
-          z-index: 9999;
-          font-family: 'Inter', sans-serif;
-        }
-
-        .classroom-header {
-          height: 70px;
-          padding: 0 2rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: rgba(0,0,0,0.3);
-        }
-
-        .session-info { display: flex; align-items: center; gap: 1.5rem; }
-        .live-pill {
-          background: #ef4444;
-          padding: 0.2rem 0.6rem;
-          border-radius: 4px;
-          font-size: 0.7rem;
-          font-weight: 800;
-          letter-spacing: 1px;
-        }
-        .divider { width: 1px; height: 30px; background: rgba(255,255,255,0.1); }
-        .session-info h3 { font-size: 1rem; margin-bottom: 0.2rem; }
-        .session-info p { font-size: 0.75rem; opacity: 0.6; }
-
-        .recording-status {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          font-size: 0.8rem;
-          font-weight: 600;
-          color: #ef4444;
-          margin-right: 1.5rem;
-        }
-        .recording-status .dot { width: 8px; height: 8px; background: #ef4444; border-radius: 50%; animation: pulse 2s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
-
-        .header-controls { display: flex; align-items: center; gap: 0.5rem; }
-        .icon-btn { background: transparent; border: none; color: white; opacity: 0.6; cursor: pointer; padding: 0.5rem; border-radius: 8px; transition: 0.2s; }
-        .icon-btn:hover { background: rgba(255,255,255,0.1); opacity: 1; }
-
-        .main-stage {
-          flex: 1;
-          display: flex;
-          padding: 1rem;
-          gap: 1rem;
-          overflow: hidden;
-        }
-
-        .video-grid {
-          flex: 1;
-          display: grid;
-          grid-template-columns: 1fr 200px;
-          gap: 1rem;
-          transition: all 0.3s ease;
-        }
-
-        .video-card {
-          background: #1c1c1e;
-          border-radius: 16px;
-          position: relative;
-          overflow: hidden;
-          border: 1px solid rgba(255,255,255,0.05);
-        }
-
-        .main-speaker { height: 100%; width: 100%; border: 3px solid var(--primary); background: #000; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .live-video-feed { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        .self { border: 2px solid #3b82f6; }
-        .cam-off { background: #000; }
-
-        .video-placeholder {
-          height: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          background: #1c1c1e;
-          gap: 1.5rem;
-        }
-        .lecturer-view { background: linear-gradient(45deg, #1c1c1e, #2c2c2e); }
-
-        .avatar-lg {
-          width: 120px;
-          height: 120px;
-          border-radius: 50%;
-          background: var(--primary);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 3rem;
-          font-weight: 700;
-          box-shadow: 0 0 40px rgba(15, 82, 186, 0.4);
-        }
-
-        .participants-sidebar {
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          overflow-y: auto;
-        }
-
-        .mini { height: 140px; }
-        .avatar-sm { width: 40px; height: 40px; border-radius: 50%; background: #3a3a3c; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; }
-        .mini-v { background: #2c2c2e; min-height: 140px; }
-        .mini-name {
-          position: absolute;
-          bottom: 0.5rem;
-          left: 0.5rem;
-          font-size: 0.7rem;
-          opacity: 0.8;
-          display: flex;
-          align-items: center;
-          gap: 0.3rem;
-        }
-
-        .self { border: 1px solid #3b82f6; }
-        .cam-off { background: #000; }
-
-        .chat-panel {
-          width: 350px;
-          display: flex;
-          flex-direction: column;
-          background: rgba(28, 28, 30, 0.8);
-          border-radius: 16px;
-        }
-
-        .panel-header { padding: 1.25rem; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; }
-        .panel-header h3 { font-size: 0.9rem; font-weight: 600; }
-        .chat-content { flex: 1; padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; }
-        .chat-msg { display: flex; flex-direction: column; gap: 0.25rem; }
-        .sender { font-size: 0.75rem; font-weight: 700; color: var(--primary); }
-        .txt { font-size: 0.85rem; opacity: 0.8; background: rgba(255,255,255,0.05); padding: 0.6rem; border-radius: 10px; border-top-left-radius: 0; }
-
-        .chat-entry { padding: 1rem; display: flex; gap: 0.5rem; }
-        .chat-entry input { flex: 1; background: #2c2c2e; border: none; border-radius: 10px; padding: 0.6rem 1rem; color: white; font-size: 0.85rem; }
-        .chat-entry input:focus { outline: 2px solid var(--primary); }
-        .chat-entry button { width: 36px; height: 36px; border-radius: 10px; background: var(--primary); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; }
-
-        .classroom-footer {
-          height: 100px;
-          padding: 0 2rem;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          background: rgba(0,0,0,0.5);
-        }
-
-        .left-tools, .right-tools { display: flex; align-items: center; gap: 1.25rem; width: 250px; }
-        .time-display { font-size: 0.9rem; font-weight: 500; opacity: 0.8; }
-        .tool-btn { position: relative; background: transparent; border: none; color: white; opacity: 0.7; cursor: pointer; }
-        .notif-dot { position: absolute; top: -2px; right: -2px; width: 8px; height: 8px; background: #3b82f6; border-radius: 50%; border: 2px solid #000; }
-
-        .center-actions { display: flex; align-items: center; gap: 1rem; }
-        .action-circle {
-          width: 52px;
-          height: 52px;
-          border-radius: 50%;
-          background: #3a3a3c;
-          border: none;
-          color: white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-        .action-circle:hover { transform: scale(1.05); background: #4a4a4c; }
-        .action-circle.off { background: #ef4444; color: white; }
-        .action-circle.secondary { background: rgba(255,255,255,0.05); }
-        .action-circle.hang-up { background: #ef4444; margin-left: 1rem; width: 64px; border-radius: 20px; }
-        .action-circle.hang-up:hover { background: #dc2626; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
-
-        .error-screen { height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #000; color: white; gap: 1rem; }
-      `}</style>
+        <Button variant="destructive" className="h-11 px-6 font-medium" onClick={handleLeave}>
+          <PhoneOff size={18} className="mr-2" />
+          {user?.role === 'lecturer' ? 'End session' : 'Leave'}
+        </Button>
+      </footer>
     </div>
   );
 }

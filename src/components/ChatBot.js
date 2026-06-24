@@ -1,26 +1,24 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { Sparkles, X, Send, User, RotateCcw, Bot, BookOpen, Clock, Award, PlayCircle, Volume2, Image as ImageIcon } from 'lucide-react';
-
+import { MessageSquare, X, Send, User, RotateCcw, Bot, Volume2, Image as ImageIcon } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 import { useStore } from '@/store/useStore';
 
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
-  const { user, courses, assignments, submissions, quizzes, quizResults, materials, notifications, library } = useStore();
-  
-  // Derive this student's enrolled courses
-  const enrolledCourses = user?.enrolledCourseIds?.length
-    ? courses.filter(c => user.enrolledCourseIds.includes(c.id))
-    : courses.filter(c => c.program === user?.program && c.level === user?.level);
+  const { user, courses, assignments, submissions, quizzes, quizResults, materials, notifications, library, getStudentCourses } = useStore();
+
+  // Derive this student's enrolled courses (single source of truth)
+  const enrolledCourses = getStudentCourses(user);
 
   const enrolledCourseIds = enrolledCourses.map(c => c.id);
 
   const [messages, setMessages] = useState([
-    { 
-      sender: 'bot', 
-      text: `Hello ${user?.name?.split(' ')[0] || 'there'}! I'm your Academic Chatbot — powered by Mistral AI and trained on your live academic data. I can see you're enrolled in ${enrolledCourses.length} course${enrolledCourses.length !== 1 ? 's' : ''}. How can I help your studies today?` 
+    {
+      sender: 'bot',
+      text: `Hello ${user?.name?.split(' ')[0] || 'there'}! I'm your academic assistant — powered by Mistral AI and trained on your live academic data. You're enrolled in ${enrolledCourses.length} course${enrolledCourses.length !== 1 ? 's' : ''}. How can I help with your studies today?`
     }
   ]);
   const [input, setInput] = useState('');
@@ -45,9 +43,9 @@ export default function ChatBot() {
   };
 
   const sendMessage = async (userText) => {
-    const newUserMessage = { 
-      sender: 'user', 
-      text: userText, 
+    const newUserMessage = {
+      sender: 'user',
+      text: userText,
       image: selectedImage // Include base64 if available
     };
     setMessages(prev => [...prev, newUserMessage]);
@@ -99,17 +97,17 @@ export default function ChatBot() {
 
 
       const data = await response.json();
-      
+
       setIsTyping(false);
       if (data.text) {
         setMessages(prev => [...prev, { sender: 'bot', text: data.text }]);
       } else {
-        setMessages(prev => [...prev, { sender: 'bot', text: "I'm experiencing a temporary scholarly disconnect. Please ensure your API credentials are configured in the environment." }]);
+        setMessages(prev => [...prev, { sender: 'bot', text: "I can't reach the assistant right now. Check that your API credentials are configured in the environment." }]);
       }
     } catch (error) {
       console.error("Chat error:", error);
       setIsTyping(false);
-      setMessages(prev => [...prev, { sender: 'bot', text: "Apologies, I encountered an error while processing your request. Please try again shortly." }]);
+      setMessages(prev => [...prev, { sender: 'bot', text: "Something went wrong while processing your request. Please try again shortly." }]);
     }
   };
 
@@ -123,247 +121,197 @@ export default function ChatBot() {
 
   return (
     <>
-      {/* Floating Action Button */}
-      <button 
-        className={`chatbot-toggle ${isOpen ? 'hidden' : ''}`}
-        onClick={() => setIsOpen(true)}
-      >
-        <Sparkles size={24} className="gemini-sparkle" />
-      </button>
+      {/* Launcher */}
+      {!isOpen && (
+        <button
+          type="button"
+          aria-label="Open academic assistant"
+          className="fixed bottom-6 right-6 z-[1000] flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card text-foreground shadow-md transition-colors hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:translate-y-px"
+          onClick={() => setIsOpen(true)}
+        >
+          <MessageSquare size={22} strokeWidth={1.75} className="text-primary" />
+        </button>
+      )}
 
-      {/* Chat Window */}
-      <div className={`chatbot-window ${isOpen ? 'open' : ''}`}>
-        <div className="chat-header">
-          <div className="header-info">
-            <div className="chatbot-logo">
-              <Sparkles size={16} color="white" />
+      {/* Chat panel */}
+      {isOpen && (
+        <div className="fixed bottom-6 right-6 z-[1001] flex h-[600px] w-[400px] max-w-[calc(100vw-3rem)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-lg animate-fade-in">
+          {/* Header */}
+          <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
+                <Bot size={18} strokeWidth={1.75} />
+              </span>
+              <div className="flex flex-col">
+                <span className="text-sm font-semibold text-foreground">Academic assistant</span>
+                <span className="text-xs text-muted-foreground">Powered by Mistral AI</span>
+              </div>
             </div>
-            <div className="title-stack">
-              <span>Academic Chatbot</span>
-              <small>Powered by Mistral AI</small>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Start a new session"
+                onClick={() => setMessages([{ sender: 'bot', text: `New session started. I'm reading your latest academic data, ${user?.name?.split(' ')[0] || 'there'}. How can I help?` }])}
+              >
+                <RotateCcw size={16} />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Close assistant"
+                onClick={() => setIsOpen(false)}
+              >
+                <X size={18} />
+              </Button>
             </div>
-          </div>
-          <div className="header-actions">
-            <button className="header-icon-btn" onClick={() => setMessages([{ sender: 'bot', text: `New session started. I'm analysing your latest academic data, ${user?.name?.split(' ')[0] || 'there'}. How can I help?` }])}>
-              <RotateCcw size={16} />
-            </button>
-            <button className="close-btn" onClick={() => setIsOpen(false)}>
-              <X size={20} />
-            </button>
-          </div>
-        </div>
+          </header>
 
-        <div className="chat-body">
-          {messages.map((msg, idx) => (
-            <div key={idx} className={`message-bubble ${msg.sender}`}>
-              {msg.sender === 'bot' && <div className="avatar bot-avatar"><Bot size={14}/></div>}
-              <div className="text">
-                {msg.text.includes('IMAGE_GENERATED:') ? (
-                  <div className="generated-image-container">
-                    <p className="mb-3 font-semibold text-blue-600">Visual Aid Generated:</p>
-                    <img 
-                      src={msg.text.split('IMAGE_GENERATED:')[1].trim()} 
-                      alt="AI Visual Aid" 
-                      className="rounded-xl shadow-lg hover:scale-[1.02] transition-transform cursor-zoom-in"
-                    />
-                  </div>
-                ) : (
-                  <>
-                    {msg.text.split('\n').map((line, i) => (
-                      <p key={i}>{line}</p>
-                    ))}
-                    {msg.sender === 'bot' && (
-                      <button 
-                        className="mt-2 text-blue-500 hover:text-blue-700 transition-colors flex items-center gap-1 text-[10px] uppercase font-black tracking-widest"
-                        onClick={() => {
-                          const utterance = new SpeechSynthesisUtterance(msg.text);
-                          window.speechSynthesis.speak(utterance);
-                        }}
-                      >
-                        <Volume2 size={12} /> Listen to Briefing
-                      </button>
-                    )}
-                  </>
+          {/* Messages */}
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto min-h-0 bg-background px-4 py-4">
+            {messages.map((msg, idx) => (
+              <div
+                key={idx}
+                className={`flex max-w-[85%] gap-2.5 ${msg.sender === 'user' ? 'ml-auto flex-row-reverse' : ''}`}
+              >
+                {msg.sender === 'bot' && (
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-green-soft text-primary">
+                    <Bot size={14} />
+                  </span>
+                )}
+                <div
+                  className={`rounded-xl border px-3.5 py-2.5 text-sm leading-relaxed ${
+                    msg.sender === 'user'
+                      ? 'border-transparent bg-primary text-primary-foreground'
+                      : 'border-border bg-card text-card-foreground'
+                  }`}
+                >
+                  {msg.text.includes('IMAGE_GENERATED:') ? (
+                    <div className="my-1">
+                      <p className="mb-2 text-xs font-medium text-muted-foreground">Visual aid generated</p>
+                      <img
+                        src={msg.text.split('IMAGE_GENERATED:')[1].trim()}
+                        alt="Generated visual aid"
+                        className="rounded-md border border-border"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      {msg.text.split('\n').map((line, i) => (
+                        <p key={i} className="text-pretty">{line}</p>
+                      ))}
+                      {msg.sender === 'bot' && (
+                        <button
+                          type="button"
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm"
+                          onClick={() => {
+                            const utterance = new SpeechSynthesisUtterance(msg.text);
+                            window.speechSynthesis.speak(utterance);
+                          }}
+                        >
+                          <Volume2 size={14} /> Read aloud
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {msg.sender === 'user' && (
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <User size={14} />
+                  </span>
                 )}
               </div>
-
-
-              {msg.sender === 'user' && <div className="avatar user-avatar"><User size={14}/></div>}
-            </div>
-          ))}
-          {isTyping && (
-            <div className="message-bubble bot typing">
-              <div className="avatar bot-avatar"><Bot size={14}/></div>
-              <div className="text typing-indicator">
-                <span></span><span></span><span></span>
+            ))}
+            {isTyping && (
+              <div className="flex max-w-[85%] gap-2.5">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand-green-soft text-primary">
+                  <Bot size={14} />
+                </span>
+                <div className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-3">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-muted-foreground/60" />
+                  <span className="sr-only">Assistant is typing</span>
+                  <span className="text-xs text-muted-foreground">Thinking</span>
+                </div>
               </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
 
-        <div className="suggestions-area">
-          {selectedImage && (
-            <div className="image-preview-container animate-in zoom-in duration-200">
-              <img src={selectedImage} alt="Preview" className="h-16 w-16 object-cover rounded-lg border-2 border-blue-500" />
-              <button onClick={() => setSelectedImage(null)} className="preview-remove">×</button>
-            </div>
-          )}
-          {messages.length < 5 && !selectedImage && (
-            <div className="chips">
-              {suggestions.map((text, i) => (
-                <button key={i} className="chip" onClick={() => sendMessage(text)}>
-                  {text}
+          {/* Suggestions / image preview */}
+          <div className="bg-background px-4 pb-2">
+            {selectedImage && (
+              <div className="relative mb-2 inline-block animate-fade-in">
+                <img src={selectedImage} alt="Selected image preview" className="h-16 w-16 rounded-md border border-border object-cover" />
+                <button
+                  type="button"
+                  aria-label="Remove image"
+                  onClick={() => setSelectedImage(null)}
+                  className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-destructive-foreground transition-colors hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <X size={12} />
                 </button>
-              ))}
-            </div>
-          )}
+              </div>
+            )}
+            {messages.length < 5 && !selectedImage && (
+              <div className="flex flex-wrap gap-2">
+                {suggestions.map((text, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => sendMessage(text)}
+                    className="rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Composer */}
+          <form className="flex items-center gap-2 border-t border-border bg-card px-4 py-3" onSubmit={handleSend}>
+            <input
+              type="file"
+              ref={fileInputRef}
+              className="hidden"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onloadend = () => setSelectedImage(reader.result);
+                  reader.readAsDataURL(file);
+                }
+              }}
+            />
+            <button
+              type="button"
+              aria-label="Attach an image"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => fileInputRef.current.click()}
+            >
+              <ImageIcon size={18} />
+            </button>
+            <input
+              type="text"
+              placeholder={selectedImage ? "Describe this image" : "Ask anything about your studies"}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+            <Button
+              type="submit"
+              size="icon"
+              aria-label="Send message"
+              disabled={(!input.trim() && !selectedImage) || isTyping}
+              className="shrink-0 active:translate-y-px"
+            >
+              <Send size={16} />
+            </Button>
+          </form>
         </div>
-
-        <form className="chat-input" onSubmit={handleSend}>
-          <input 
-            type="file" 
-            ref={fileInputRef} 
-            className="hidden" 
-            accept="image/*"
-            onChange={(e) => {
-              const file = e.target.files[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onloadend = () => setSelectedImage(reader.result);
-                reader.readAsDataURL(file);
-              }
-            }}
-          />
-          <button type="button" className="upload-btn" onClick={() => fileInputRef.current.click()}>
-            <ImageIcon size={18} />
-          </button>
-          <input 
-            type="text" 
-            placeholder={selectedImage ? "Describe this image..." : "Ask anything about your studies..."} 
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-          />
-          <button type="submit" disabled={(!input.trim() && !selectedImage) || isTyping}>
-            <Send size={16} />
-          </button>
-        </form>
-
-      </div>
-
-      <style jsx>{`
-        .chatbot-toggle {
-          position: fixed;
-          bottom: 2.5rem;
-          right: 2.5rem;
-          width: 64px;
-          height: 64px;
-          border-radius: 22px;
-          background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-          color: white;
-          border: none;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 1000;
-          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .chatbot-toggle:hover { transform: scale(1.1) rotate(5deg); }
-        .chatbot-toggle.hidden { transform: scale(0); opacity: 0; pointer-events: none; }
-
-        .chatbot-window {
-          position: fixed;
-          bottom: 2.5rem;
-          right: 2.5rem;
-          width: 400px;
-          height: 600px;
-          background: #ffffff;
-          border-radius: 24px;
-          box-shadow: 0 20px 50px rgba(0,0,0,0.15);
-          display: flex;
-          flex-direction: column;
-          z-index: 1001;
-          transform-origin: bottom right;
-          transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-          overflow: hidden;
-          opacity: 0;
-          transform: scale(0.9) translateY(20px);
-          pointer-events: none;
-        }
-
-        :global([data-theme='dark']) .chatbot-window { background: #1a1a1b; border: 1px solid #333; }
-
-        .chatbot-window.open { opacity: 1; transform: scale(1) translateY(0); pointer-events: all; }
-
-        .chat-header {
-          padding: 1.5rem;
-          background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
-          color: white;
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-        }
-
-        .header-info { display: flex; align-items: center; gap: 0.75rem; }
-        .chatbot-logo { width: 32px; height: 32px; background: rgba(255,255,255,0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-        .title-stack { display: flex; flex-direction: column; }
-        .title-stack span { font-weight: 700; font-size: 1rem; }
-        .title-stack small { font-size: 0.7rem; opacity: 0.8; }
-
-        .header-actions { display: flex; gap: 0.5rem; }
-        .header-icon-btn, .close-btn { background: transparent; border: none; color: white; opacity: 0.7; cursor: pointer; transition: 0.2s; padding: 0.4rem; border-radius: 8px; }
-        .header-icon-btn:hover, .close-btn:hover { opacity: 1; background: rgba(255,255,255,0.15); }
-
-        .chat-body { flex: 1; padding: 1.5rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1.25rem; background: #f8fafc; }
-        :global([data-theme='dark']) .chat-body { background: #0f0f10; }
-
-        .message-bubble { display: flex; gap: 0.75rem; max-width: 85%; }
-        .message-bubble.user { margin-left: auto; flex-direction: row-reverse; }
-
-        .avatar { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .bot-avatar { background: #eff6ff; color: #1a73e8; }
-        .user-avatar { background: #4b5563; color: white; }
-
-        .text { padding: 0.85rem 1.1rem; border-radius: 18px; font-size: 0.9rem; line-height: 1.5; color: #1e293b; background: white; border: 1px solid #e2e8f0; }
-        :global([data-theme='dark']) .text { background: #262627; color: #f1f5f9; border-color: #333; }
-        .message-bubble.user .text { background: #1a73e8; color: white; border: none; border-bottom-right-radius: 4px; }
-        .message-bubble.bot .text { border-bottom-left-radius: 4px; }
-        .generated-image-container { margin: 0.5rem 0; max-width: 100%; }
-        .generated-image-container img { max-width: 100%; height: auto; display: block; border: 2px solid #e2e8f0; }
-        :global([data-theme='dark']) .generated-image-container img { border-color: #333; }
-
-
-        .typing-indicator { display: flex; gap: 4px; padding: 0.8rem 1.2rem; }
-        .typing-indicator span { width: 6px; height: 6px; background: #94a3b8; border-radius: 50%; animation: blink 1.4s infinite both; }
-        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
-        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
-
-        @keyframes blink { 0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); } 40% { opacity: 1; transform: scale(1.2); } }
-
-        .suggestions-area { padding: 0 1.5rem 1rem; background: #f8fafc; }
-        :global([data-theme='dark']) .suggestions-area { background: #0f0f10; }
-        .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-        .chip { padding: 0.5rem 0.85rem; background: white; border: 1px solid #e2e8f0; border-radius: 12px; font-size: 0.75rem; color: #64748b; cursor: pointer; transition: 0.2s; }
-        :global([data-theme='dark']) .chip { background: #262627; border-color: #333; color: #94a3b8; }
-        .chip:hover { border-color: #1a73e8; color: #1a73e8; background: #f0f7ff; }
-
-        .chat-input { padding: 1.25rem 1.5rem; background: white; border-top: 1px solid #e2e8f0; display: flex; gap: 0.75rem; }
-        :global([data-theme='dark']) .chat-input { background: #1a1a1b; border-color: #333; }
-        .chat-input input { flex: 1; border: none; background: #f1f5f9; color: #1e293b; padding: 0.75rem 1.25rem; border-radius: 14px; font-size: 0.9rem; }
-        :global([data-theme='dark']) .chat-input input { background: #0f0f10; color: white; }
-        .chat-input input:focus { outline: 2px solid #1a73e8; }
-        .upload-btn { background: transition: 0.2s; color: #64748b; padding: 0.5rem; border-radius: 10px; cursor: pointer; border: none; background: transparent; }
-        .upload-btn:hover { background: #f1f5f9; color: #1a73e8; }
-        .image-preview-container { position: relative; margin-bottom: 0.75rem; display: inline-block; }
-        .preview-remove { position: absolute; top: -8px; right: -8px; width: 20px; height: 20px; background: #ef4444; color: white; border-radius: 50%; border: none; font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .chat-input button { width: 42px; height: 42px; border-radius: 12px; background: #1a73e8; color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s; }
-
-        .chat-input button:disabled { opacity: 0.5; cursor: not-allowed; }
-        .chat-input button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3); }
-      `}</style>
+      )}
     </>
   );
 }

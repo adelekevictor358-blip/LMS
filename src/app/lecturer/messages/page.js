@@ -3,6 +3,7 @@
 import { useStore } from '@/store/useStore';
 import { useState } from 'react';
 import { MessageSquare, Send, Search } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export default function LecturerMessages() {
   const { user, messages, sendMessage, markMessagesRead, getAllUsers } = useStore();
@@ -34,135 +35,134 @@ export default function LecturerMessages() {
   const conversation = activeContact ? getConversation(activeContact.id) : [];
 
   return (
-    <div className="messages-layout animate-fade-in">
-      {/* Contacts Sidebar */}
-      <div className="contacts-panel glass-panel">
-        <div className="contacts-header">
-          <h3><MessageSquare size={18} /> Messages</h3>
-          <p>Chat with your students</p>
-        </div>
-        <div className="search-bar">
-          <Search size={15} />
-          <input type="text" placeholder="Search students..." value={search} onChange={e => setSearch(e.target.value)} />
-        </div>
-        <div className="contacts-list">
-          {filteredStudents.map(student => {
-            const unread = getUnread(student.id);
-            const conv = getConversation(student.id);
-            const last = conv[conv.length - 1];
-            return (
-              <div
-                key={student.id}
-                className={`contact-item ${activeContact?.id === student.id ? 'active' : ''}`}
-                onClick={() => handleSelect(student)}
-              >
-                <div className="contact-avatar">{student.avatar}</div>
-                <div className="contact-info">
-                  <div className="contact-name-row">
-                    <strong>{student.name}</strong>
-                    {unread > 0 && <span className="unread-badge">{unread}</span>}
-                  </div>
-                  <span className="contact-last">{last ? last.content.slice(0, 35) + '...' : 'No messages yet'}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+    <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6 h-[calc(100vh-180px)] min-h-[500px] animate-fade-in">
+      {/* Contacts sidebar */}
+      <aside className="flex flex-col overflow-hidden bg-card text-card-foreground border border-border rounded-xl shadow-sm">
+        <header className="px-5 py-4 border-b border-border">
+          <h2 className="flex items-center gap-2 text-lg font-semibold text-foreground">
+            <MessageSquare size={18} className="text-muted-foreground" />
+            Messages
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">Chat with your students</p>
+        </header>
 
-      {/* Chat Area */}
-      <div className="chat-area glass-panel">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border text-muted-foreground focus-within:text-foreground">
+          <Search size={16} />
+          <input
+            type="text"
+            placeholder="Search students"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+          />
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {filteredStudents.length === 0 ? (
+            <p className="px-5 py-6 text-sm text-muted-foreground text-pretty">No students found.</p>
+          ) : (
+            filteredStudents.map(student => {
+              const unread = getUnread(student.id);
+              const conv = getConversation(student.id);
+              const last = conv[conv.length - 1];
+              const isActive = activeContact?.id === student.id;
+              return (
+                <button
+                  key={student.id}
+                  type="button"
+                  onClick={() => handleSelect(student)}
+                  className={`flex w-full items-center gap-3 px-4 py-3 text-left border-b border-border transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${
+                    isActive
+                      ? 'bg-accent border-l-2 border-l-primary'
+                      : 'hover:bg-accent border-l-2 border-l-transparent'
+                  }`}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                    {student.avatar}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-semibold text-foreground">{student.name}</span>
+                      {unread > 0 && (
+                        <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[0.625rem] font-semibold tabular-nums text-primary-foreground">
+                          {unread}
+                        </span>
+                      )}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {last ? last.content.slice(0, 35) + '...' : 'No messages yet'}
+                    </span>
+                  </span>
+                </button>
+              );
+            })
+          )}
+        </div>
+      </aside>
+
+      {/* Chat area */}
+      <section className="flex flex-col overflow-hidden bg-card text-card-foreground border border-border rounded-xl shadow-sm">
         {!activeContact ? (
-          <div className="chat-empty">
-            <MessageSquare size={48} />
-            <h3>Select a student to start messaging</h3>
-            <p>Click on a student from the left panel to view or start a conversation.</p>
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+            <MessageSquare size={40} strokeWidth={1.5} className="text-muted-foreground" />
+            <h3 className="text-lg font-semibold text-foreground text-balance">Select a student to start messaging</h3>
+            <p className="max-w-prose text-sm leading-relaxed text-muted-foreground text-pretty">
+              Choose a student from the left panel to view or start a conversation.
+            </p>
           </div>
         ) : (
           <>
-            <div className="chat-header">
-              <div className="contact-avatar">{activeContact.avatar}</div>
-              <div>
-                <strong>{activeContact.name}</strong>
-                <span>{activeContact.matNo} · {activeContact.department}</span>
+            <header className="flex items-center gap-3 px-5 py-4 border-b border-border">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                {activeContact.avatar}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-foreground">{activeContact.name}</p>
+                <p className="truncate text-xs text-muted-foreground">{activeContact.matNo} · {activeContact.department}</p>
               </div>
-            </div>
-            <div className="chat-messages">
+            </header>
+
+            <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-6">
               {conversation.length === 0 ? (
-                <div className="no-messages">No messages yet. Say hello! 👋</div>
+                <p className="m-auto text-center text-sm text-muted-foreground text-pretty">No messages yet. Say hello.</p>
               ) : (
-                conversation.map(msg => (
-                  <div key={msg.id} className={`message-bubble ${msg.from === user.id ? 'sent' : 'received'}`}>
-                    <div className="bubble-content">{msg.content}</div>
-                    <span className="bubble-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                ))
+                conversation.map(msg => {
+                  const sent = msg.from === user.id;
+                  return (
+                    <div key={msg.id} className={`flex max-w-[65%] flex-col ${sent ? 'self-end items-end' : 'self-start items-start'}`}>
+                      <div
+                        className={`rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
+                          sent
+                            ? 'bg-primary text-primary-foreground rounded-br-sm'
+                            : 'bg-muted text-foreground rounded-bl-sm'
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+                      <span className="mt-1 text-[0.6875rem] tabular-nums text-muted-foreground">
+                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                  );
+                })
               )}
             </div>
-            <form onSubmit={handleSend} className="chat-input-bar">
+
+            <form onSubmit={handleSend} className="flex items-center gap-3 px-5 py-4 border-t border-border">
               <input
                 type="text"
-                placeholder={`Message ${activeContact.name}...`}
+                placeholder={`Message ${activeContact.name}`}
                 value={newMessage}
                 onChange={e => setNewMessage(e.target.value)}
+                className="h-10 flex-1 rounded-md border border-input bg-transparent px-4 text-sm text-foreground placeholder:text-muted-foreground transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
               />
-              <button type="submit" className="btn btn-primary send-btn" disabled={!newMessage.trim()}>
+              <Button type="submit" size="icon" disabled={!newMessage.trim()} aria-label="Send message">
                 <Send size={16} />
-              </button>
+              </Button>
             </form>
           </>
         )}
-      </div>
-
-      <style jsx>{`
-        .messages-layout { display: grid; grid-template-columns: 300px 1fr; gap: 1.5rem; height: calc(100vh - 180px); min-height: 500px; }
-
-        .contacts-panel { display: flex; flex-direction: column; overflow: hidden; }
-        .contacts-header { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--card-border); }
-        .contacts-header h3 { display: flex; align-items: center; gap: 0.5rem; font-size: 1rem; margin-bottom: 0.2rem; }
-        .contacts-header p { font-size: 0.78rem; color: var(--text-muted); }
-
-        .search-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--card-border); color: var(--text-muted); }
-        .search-bar input { flex: 1; border: none; background: transparent; color: var(--text-main); font-family: inherit; font-size: 0.88rem; outline: none; }
-
-        .contacts-list { flex: 1; overflow-y: auto; }
-        .contact-item { display: flex; align-items: center; gap: 0.85rem; padding: 1rem 1.25rem; cursor: pointer; transition: background 0.2s; border-bottom: 1px solid var(--card-border); }
-        .contact-item:hover, .contact-item.active { background: var(--nav-active); }
-        .contact-item.active { border-left: 3px solid var(--primary); }
-        .contact-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.82rem; font-weight: 700; flex-shrink: 0; }
-        .contact-info { flex: 1; min-width: 0; }
-        .contact-name-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
-        .contact-name-row strong { font-size: 0.88rem; color: var(--text-main); }
-        .unread-badge { background: var(--primary); color: white; font-size: 0.62rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 10px; }
-        .contact-last { font-size: 0.76rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
-
-        .chat-area { display: flex; flex-direction: column; overflow: hidden; }
-        .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; color: var(--text-muted); text-align: center; padding: 2rem; }
-        .chat-empty h3 { font-size: 1.1rem; color: var(--text-main); }
-
-        .chat-header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--card-border); }
-        .chat-header strong { display: block; font-size: 0.95rem; color: var(--text-main); }
-        .chat-header span { font-size: 0.78rem; color: var(--text-muted); }
-
-        .chat-messages { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.85rem; }
-        .no-messages { text-align: center; color: var(--text-muted); font-size: 0.9rem; margin: auto; }
-
-        .message-bubble { display: flex; flex-direction: column; max-width: 65%; }
-        .message-bubble.sent { align-self: flex-end; align-items: flex-end; }
-        .message-bubble.received { align-self: flex-start; align-items: flex-start; }
-        .bubble-content { padding: 0.75rem 1rem; border-radius: 12px; font-size: 0.9rem; line-height: 1.5; }
-        .sent .bubble-content { background: var(--primary); color: white; border-bottom-right-radius: 4px; }
-        .received .bubble-content { background: rgba(0,0,0,0.06); color: var(--text-main); border-bottom-left-radius: 4px; }
-        [data-theme='dark'] .received .bubble-content { background: rgba(255,255,255,0.08); }
-        .bubble-time { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.25rem; }
-
-        .chat-input-bar { display: flex; gap: 0.75rem; padding: 1rem 1.5rem; border-top: 1px solid var(--card-border); }
-        .chat-input-bar input { flex: 1; padding: 0.75rem 1rem; border-radius: 20px; border: 1px solid var(--card-border); background: rgba(255,255,255,0.6); color: var(--text-main); font-family: inherit; font-size: 0.9rem; transition: border-color 0.2s; }
-        [data-theme='dark'] .chat-input-bar input { background: rgba(17,24,39,0.5); }
-        .chat-input-bar input:focus { outline: none; border-color: var(--primary); }
-        .send-btn { width: 42px; height: 42px; border-radius: 50%; padding: 0; }
-        .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-      `}</style>
+      </section>
     </div>
   );
 }

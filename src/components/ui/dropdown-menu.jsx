@@ -1,13 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { ChevronRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-/**
- * Institutional Mock Dropdown
- * Bypasses heavy Radix dependency while maintaining premium aesthetics.
- */
+// Lightweight dropdown (no Radix dependency) styled with the design system.
 
 const DropdownContext = React.createContext(null)
 
@@ -34,7 +30,7 @@ const DropdownMenu = ({ children }) => {
   )
 }
 
-const DropdownMenuTrigger = ({ children, asChild }) => {
+const DropdownMenuTrigger = ({ children }) => {
   const { setOpen, open } = React.useContext(DropdownContext)
   return (
     <div onClick={() => setOpen(!open)} className="cursor-pointer">
@@ -43,13 +39,14 @@ const DropdownMenuTrigger = ({ children, asChild }) => {
   )
 }
 
-const DropdownMenuContent = ({ children, className }) => {
+const DropdownMenuContent = ({ children, className, align = "end" }) => {
   const { open } = React.useContext(DropdownContext)
   if (!open) return null
 
   return (
     <div className={cn(
-      "absolute right-0 mt-4 z-[100] min-w-[16rem] overflow-hidden rounded-[32px] border border-slate-200 bg-white p-2 text-slate-950 shadow-5xl animate-in zoom-in-95 duration-200 dark:border-white/5 dark:bg-slate-900 dark:text-slate-50",
+      "absolute z-[100] mt-2 min-w-[14rem] overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md animate-fade-in",
+      align === "end" ? "right-0" : "left-0",
       className
     )}>
       {children}
@@ -60,9 +57,9 @@ const DropdownMenuContent = ({ children, className }) => {
 const DropdownMenuItem = ({ children, className, onClick }) => {
   const { setOpen } = React.useContext(DropdownContext)
   return (
-    <div 
+    <div
       className={cn(
-        "relative flex cursor-pointer select-none items-center rounded-2xl px-4 py-3 text-sm font-black italic uppercase tracking-widest outline-none transition-colors hover:bg-slate-50 dark:hover:bg-white/5",
+        "relative flex cursor-pointer select-none items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
         className
       )}
       onClick={() => {
@@ -76,13 +73,13 @@ const DropdownMenuItem = ({ children, className, onClick }) => {
 }
 
 const DropdownMenuLabel = ({ children, className }) => (
-  <div className={cn("px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-400 italic", className)}>
+  <div className={cn("px-3 py-2 text-xs font-medium text-muted-foreground", className)}>
     {children}
   </div>
 )
 
 const DropdownMenuSeparator = ({ className }) => (
-  <div className={cn("-mx-2 my-2 h-px bg-slate-100 dark:bg-white/5", className)} />
+  <div className={cn("-mx-1 my-1 h-px bg-border", className)} />
 )
 
 const DropdownMenuGroup = ({ children }) => <div>{children}</div>

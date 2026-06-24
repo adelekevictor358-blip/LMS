@@ -2,10 +2,9 @@
 
 import { useStore } from '@/store/useStore';
 import { useState, useEffect } from 'react';
-import { 
-  LayoutDashboard, BookOpen, Clock, AlertCircle, 
-  CheckCircle2, Calendar, FileText, Play, Users, 
-  ChevronRight, GraduationCap, Bell, Zap
+import {
+  BookOpen, Clock, CheckCircle2, Calendar, FileText,
+  Play, Users, ChevronRight, GraduationCap, Bell, Radio, Sparkles
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,18 +14,8 @@ import { useRouter } from 'next/navigation';
 
 export default function StudentDashboard() {
   const router = useRouter();
-  const { user, courses, assignments, submissions, liveSessions } = useStore();
-  const [waveFrame, setWaveFrame] = useState(0);
+  const { user, courses, assignments, submissions, liveSessions, getStudentCourses } = useStore();
   const [greeting, setGreeting] = useState('');
-
-  // Animated hand wave frames
-  const waveEmojis = ['👋', '🤚', '👋', '🤚', '👋'];
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setWaveFrame(f => (f + 1) % waveEmojis.length);
-    }, 350);
-    return () => clearInterval(interval);
-  }, []);
 
   // Dynamic greeting
   useEffect(() => {
@@ -36,13 +25,11 @@ export default function StudentDashboard() {
     else setGreeting('Good evening');
   }, []);
 
-  // For enrolled courses: match by program if no explicit enrolledCourseIds
-  const enrolledCourses = user?.enrolledCourseIds?.length
-    ? courses.filter(c => user.enrolledCourseIds.includes(c.id))
-    : courses.filter(c => c.program === user?.program && c.level === user?.level);
+  // Single source of truth for the student's courses (shared store selector)
+  const enrolledCourses = getStudentCourses(user);
 
   const enrolledCourseIds = enrolledCourses.map(c => c.id);
-  const activeAssignments = assignments.filter(a => 
+  const activeAssignments = assignments.filter(a =>
     (enrolledCourseIds.includes(a.courseId) || enrolledCourseIds.length === 0) && a.status === 'active'
   );
   const studentSubmissions = submissions.filter(s => s.studentId === user?.id);
@@ -56,102 +43,90 @@ export default function StudentDashboard() {
   });
 
   const stats = [
-    { label: 'Enrolled Courses', value: enrolledCourses.length || 0, icon: <BookOpen className="text-blue-600" />, color: 'blue', sub: 'This semester' },
-    { label: 'Active Assignments', value: activeAssignments.length, icon: <FileText className="text-orange-600" />, color: 'orange', sub: urgentAssignments.length > 0 ? `${urgentAssignments.length} urgent!` : 'On track' },
-    { label: 'Completed Tasks', value: studentSubmissions.length, icon: <CheckCircle2 className="text-green-600" />, color: 'green', sub: 'Submissions made' },
-    { label: 'Live Sessions', value: activeSessions.length, icon: <Zap className="text-purple-600" />, color: 'purple', sub: activeSessions.length > 0 ? 'In progress now' : 'None active' },
+    { label: 'Enrolled courses', value: enrolledCourses.length || 0, icon: <BookOpen size={20} className="text-muted-foreground" />, sub: 'This semester' },
+    { label: 'Active assignments', value: activeAssignments.length, icon: <FileText size={20} className="text-muted-foreground" />, sub: urgentAssignments.length > 0 ? `${urgentAssignments.length} due soon` : 'On track' },
+    { label: 'Completed tasks', value: studentSubmissions.length, icon: <CheckCircle2 size={20} className="text-muted-foreground" />, sub: 'Submissions made' },
+    { label: 'Live sessions', value: activeSessions.length, icon: <Radio size={20} className="text-muted-foreground" />, sub: activeSessions.length > 0 ? 'In progress now' : 'None active' },
   ];
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Welcome Section with animated hand wave */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-8 rounded-2xl border shadow-sm overflow-hidden relative">
-        <div className="absolute top-0 right-0 w-64 h-full bg-gradient-to-l from-blue-50 dark:from-blue-900/10 to-transparent pointer-events-none" />
-        <div className="relative z-10">
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
-            {greeting}, {user?.name?.split(' ')[0]}!
-            <span
-              className="inline-block"
-              style={{
-                display: 'inline-block',
-                transformOrigin: '70% 70%',
-                animation: 'wave-hand 2.5s ease-in-out infinite',
-                fontSize: '2rem'
-              }}
-            >
-              👋
-            </span>
+    <div className="space-y-8 animate-fade-in">
+      {/* Welcome */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-card text-card-foreground p-6 md:p-8 rounded-xl border border-border shadow-sm">
+        <div>
+          <h1 className="font-serif text-2xl md:text-3xl font-semibold tracking-tight text-foreground text-balance">
+            {greeting}, {user?.name?.split(' ')[0]}
           </h1>
-          <p className="text-slate-500 mt-1 font-medium">
+          <p className="text-sm leading-relaxed text-muted-foreground mt-1 text-pretty">
             {activeAssignments.length > 0
-              ? `You have ${activeAssignments.length} assignment${activeAssignments.length > 1 ? 's' : ''} pending. ${urgentAssignments.length > 0 ? `⚠️ ${urgentAssignments.length} due soon!` : 'Keep it up!'}`
-              : 'No pending assignments. Great job staying on top of things!'
+              ? `You have ${activeAssignments.length} assignment${activeAssignments.length > 1 ? 's' : ''} pending. ${urgentAssignments.length > 0 ? `${urgentAssignments.length} due soon.` : 'Keep it up.'}`
+              : 'No pending assignments. You are all caught up.'
             }
           </p>
           {user?.program && (
-            <p className="text-xs font-semibold text-blue-600 mt-1 uppercase tracking-wide">{user.program} · {user?.level || ''}</p>
+            <p className="text-xs font-medium text-muted-foreground mt-2">{user.program} · {user?.level || ''}</p>
           )}
         </div>
-        <div className="flex gap-3 relative z-10">
-          <Button onClick={() => router.push('/dashboard/courses')} className="bg-blue-600 hover:bg-blue-700">My Courses</Button>
+        <div className="flex gap-3">
+          <Button onClick={() => router.push('/dashboard/courses')}>My courses</Button>
           <Button variant="outline" onClick={() => router.push('/dashboard/settings')}>Profile</Button>
         </div>
-      </div>
+      </header>
 
-      {/* Stats Grid — no CGPA */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Stats */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {stats.map((stat, i) => (
-          <Card key={i} className="border-none shadow-sm overflow-hidden hover:shadow-md transition-shadow">
-            <CardContent className="p-6 flex items-center gap-5">
-              <div className={`p-4 rounded-xl bg-${stat.color}-50 dark:bg-${stat.color}-900/20`}>
+          <Card key={i} className="border border-border shadow-sm">
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="p-3 rounded-md bg-muted">
                 {stat.icon}
               </div>
               <div>
-                <p className="text-sm font-bold text-slate-500 uppercase tracking-tight">{stat.label}</p>
-                <p className="text-3xl font-black text-slate-900 dark:text-white">{stat.value}</p>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">{stat.sub}</p>
+                <p className="text-xs font-medium text-muted-foreground">{stat.label}</p>
+                <p className="text-2xl font-semibold tabular-nums text-foreground">{stat.value}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{stat.sub}</p>
               </div>
             </CardContent>
           </Card>
         ))}
-      </div>
+      </section>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Main Content Area */}
+        {/* Main content */}
         <div className="xl:col-span-2 space-y-8">
-          {/* Active Live Sessions */}
+          {/* Active live sessions */}
           {activeSessions.length > 0 && (
-            <Card className="border-2 border-blue-100 dark:border-blue-900/30 overflow-hidden">
-              <CardHeader className="bg-blue-50 dark:bg-blue-900/20 p-6">
-                <div className="flex justify-between items-center">
+            <Card className="border border-border shadow-sm overflow-hidden">
+              <CardHeader className="p-5 border-b border-border">
+                <div className="flex justify-between items-center gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="relative flex h-3 w-3">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-success/60 animate-pulse"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
                     </span>
-                    <CardTitle className="text-lg font-bold text-blue-900 dark:text-blue-100 uppercase">Live Academic Sessions</CardTitle>
+                    <CardTitle className="text-lg font-semibold text-foreground">Live sessions</CardTitle>
                   </div>
-                  <Badge variant="outline" className="bg-white dark:bg-slate-800 text-blue-600 border-blue-200">Session Active</Badge>
+                  <Badge variant="outline" className="bg-success/10 text-success border-transparent rounded-full">Live</Badge>
                 </div>
               </CardHeader>
               <CardContent className="p-0">
                 {activeSessions.map((session, idx) => {
                   const course = courses.find(c => c.id === session.courseId);
                   return (
-                    <div key={idx} className="p-6 flex items-center justify-between border-b last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                      <div className="flex items-center gap-5">
-                        <div className="h-12 w-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
+                    <div key={idx} className="p-5 flex items-center justify-between gap-4 border-b border-border last:border-0 transition-colors hover:bg-muted">
+                      <div className="flex items-center gap-4">
+                        <div className="h-12 w-12 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-sm font-semibold">
                           {course?.code?.slice(0, 3)}
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 dark:text-white">{course?.title || session.title}</p>
-                          <p className="text-sm text-slate-500 flex items-center gap-1">
-                            <Users size={14} /> {session.participants?.length || 0} Students · {session.lecturerName}
+                          <p className="font-semibold text-foreground">{course?.title || session.title}</p>
+                          <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+                            <Users size={16} /> {session.participants?.length || 0} students · {session.lecturerName}
                           </p>
                         </div>
                       </div>
-                      <Button onClick={() => router.push(`/dashboard/classroom/${session.id}`)} className="bg-blue-600 hover:bg-blue-700 h-10 px-6 rounded-full font-bold">
-                        <Play size={16} className="mr-2 fill-current" /> Join Class
+                      <Button onClick={() => router.push(`/dashboard/classroom/${session.id}`)} className="active:translate-y-px">
+                        <Play size={16} className="fill-current" /> Join class
                       </Button>
                     </div>
                   );
@@ -160,66 +135,71 @@ export default function StudentDashboard() {
             </Card>
           )}
 
-          {/* Current Courses Progress */}
-          <SectionHeader title="My Courses" icon={<GraduationCap size={20} />} onViewAll={() => router.push('/dashboard/courses')} />
-          {enrolledCourses.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {enrolledCourses.slice(0, 4).map((course, idx) => {
-                const courseAssignments = assignments.filter(a => a.courseId === course.id && a.status === 'active');
-                const done = studentSubmissions.filter(s => courseAssignments.some(a => a.id === s.assignmentId)).length;
-                const progress = courseAssignments.length > 0 ? Math.round((done / courseAssignments.length) * 100) : 0;
-                return (
-                  <Card key={idx} className="group hover:border-blue-200 dark:hover:border-blue-800 transition-all cursor-pointer" onClick={() => router.push('/dashboard/courses')}>
-                    <CardContent className="p-6">
-                      <div className="flex justify-between items-start mb-4">
-                        <Badge variant="outline" style={{ color: course.color, borderColor: `${course.color}40` }}>{course.code}</Badge>
-                        <span className="text-xs font-bold text-slate-400">{course.level}</span>
-                      </div>
-                      <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors mb-4">{course.title}</h4>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-xs font-bold mb-1">
-                          <span className="text-slate-500 uppercase">Tasks Done</span>
-                          <span className="text-blue-600">{done}/{courseAssignments.length}</span>
+          {/* Current courses progress */}
+          <section>
+            <SectionHeader title="My courses" icon={<GraduationCap size={18} />} onViewAll={() => router.push('/dashboard/courses')} />
+            {enrolledCourses.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {enrolledCourses.slice(0, 4).map((course, idx) => {
+                  const courseAssignments = assignments.filter(a => a.courseId === course.id && a.status === 'active');
+                  const done = studentSubmissions.filter(s => courseAssignments.some(a => a.id === s.assignmentId)).length;
+                  const progress = courseAssignments.length > 0 ? Math.round((done / courseAssignments.length) * 100) : 0;
+                  return (
+                    <Card key={idx} className="group border border-border shadow-sm transition-colors hover:border-primary/40 cursor-pointer" onClick={() => router.push('/dashboard/courses')}>
+                      <CardContent className="p-5">
+                        <div className="flex justify-between items-start mb-4 gap-3">
+                          <span className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                            <span className="h-2 w-2 rounded-full" style={{ backgroundColor: course.color }} aria-hidden="true" />
+                            {course.code}
+                          </span>
+                          <span className="text-xs font-medium text-muted-foreground">{course.level}</span>
                         </div>
-                        <Progress value={progress} className="h-2" />
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
-            <Card className="border-dashed">
-              <CardContent className="p-12 flex flex-col items-center justify-center text-center gap-4">
-                <BookOpen size={48} className="text-slate-300" />
-                <p className="font-bold text-slate-500">No courses enrolled yet.</p>
-                <Button onClick={() => router.push('/dashboard/courses')} className="bg-blue-600 hover:bg-blue-700">Explore Courses</Button>
-              </CardContent>
-            </Card>
-          )}
+                        <h4 className="font-semibold text-foreground transition-colors group-hover:text-primary mb-4 text-pretty">{course.title}</h4>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-xs font-medium mb-1">
+                            <span className="text-muted-foreground">Tasks done</span>
+                            <span className="text-foreground tabular-nums">{done}/{courseAssignments.length}</span>
+                          </div>
+                          <Progress value={progress} className="h-2" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            ) : (
+              <Card className="border border-border shadow-sm">
+                <CardContent className="p-12 flex flex-col items-center justify-center text-center gap-4">
+                  <BookOpen size={40} strokeWidth={1.5} className="text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">You are not enrolled in any courses yet.</p>
+                  <Button onClick={() => router.push('/dashboard/courses')}>Explore courses</Button>
+                </CardContent>
+              </Card>
+            )}
+          </section>
 
-          {/* Pending Assignments */}
+          {/* Pending assignments */}
           {activeAssignments.length > 0 && (
-            <>
-              <SectionHeader title="Pending Assignments" icon={<FileText size={20} />} onViewAll={() => router.push('/dashboard/assignments')} />
+            <section>
+              <SectionHeader title="Pending assignments" icon={<FileText size={18} />} onViewAll={() => router.push('/dashboard/assignments')} />
               <div className="space-y-3">
                 {activeAssignments.slice(0, 3).map((assignment, idx) => {
                   const course = courses.find(c => c.id === assignment.courseId);
                   const daysLeft = Math.ceil((new Date(assignment.dueDate) - Date.now()) / 86400000);
                   const isUrgent = daysLeft <= 2;
                   return (
-                    <Card key={idx} className={`${isUrgent ? 'border-orange-200 dark:border-orange-900/40' : ''}`}>
-                      <CardContent className="p-5 flex items-center justify-between">
+                    <Card key={idx} className={`border shadow-sm ${isUrgent ? 'border-warning/40' : 'border-border'}`}>
+                      <CardContent className="p-5 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                          <div className={`p-2.5 rounded-xl ${isUrgent ? 'bg-orange-50 dark:bg-orange-900/20' : 'bg-blue-50 dark:bg-blue-900/20'}`}>
-                            <FileText size={18} className={isUrgent ? 'text-orange-600' : 'text-blue-600'} />
+                          <div className={`p-2.5 rounded-md ${isUrgent ? 'bg-warning/10' : 'bg-muted'}`}>
+                            <FileText size={18} className={isUrgent ? 'text-warning' : 'text-muted-foreground'} />
                           </div>
                           <div>
-                            <p className="font-bold text-slate-900 dark:text-white text-sm">{assignment.title}</p>
-                            <p className="text-xs text-slate-500">{course?.code} · Due in {daysLeft} day{daysLeft !== 1 ? 's' : ''}</p>
+                            <p className="font-semibold text-foreground text-sm text-pretty">{assignment.title}</p>
+                            <p className="text-xs text-muted-foreground">{course?.code} · Due in {daysLeft} day{daysLeft !== 1 ? 's' : ''}</p>
                           </div>
                         </div>
-                        <Badge className={isUrgent ? 'bg-orange-100 text-orange-700 border-none' : 'bg-blue-100 text-blue-700 border-none'}>
+                        <Badge variant="outline" className={isUrgent ? 'bg-warning/10 text-warning border-transparent' : 'bg-muted text-muted-foreground border-transparent'}>
                           {isUrgent ? 'Urgent' : 'Active'}
                         </Badge>
                       </CardContent>
@@ -227,83 +207,78 @@ export default function StudentDashboard() {
                   );
                 })}
               </div>
-            </>
+            </section>
           )}
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-8">
-          {/* Quick Actions */}
-          <Card className="shadow-sm">
+        <aside className="space-y-8">
+          {/* Quick access */}
+          <Card className="border border-border shadow-sm">
             <CardHeader>
-              <CardTitle className="text-lg font-bold flex items-center gap-2">
-                <Clock size={18} className="text-blue-600" /> Quick Access
+              <CardTitle className="text-lg font-semibold flex items-center gap-2 text-foreground">
+                <Clock size={18} className="text-muted-foreground" /> Quick access
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-1">
               {[
-                { label: 'My Assignments', path: '/dashboard/assignments', icon: <FileText size={16} />, color: 'orange' },
-                { label: 'Take a Quiz', path: '/dashboard/quizzes', icon: <CheckCircle2 size={16} />, color: 'green' },
-                { label: 'Course Library', path: '/dashboard/library', icon: <BookOpen size={16} />, color: 'blue' },
-                { label: 'Past Questions', path: '/dashboard/past-questions', icon: <Calendar size={16} />, color: 'purple' },
-                { label: 'Inbox', path: '/dashboard/inbox', icon: <Bell size={16} />, color: 'red' },
+                { label: 'My assignments', path: '/dashboard/assignments', icon: <FileText size={16} /> },
+                { label: 'Take a quiz', path: '/dashboard/quizzes', icon: <CheckCircle2 size={16} /> },
+                { label: 'Course library', path: '/dashboard/library', icon: <BookOpen size={16} /> },
+                { label: 'Past questions', path: '/dashboard/past-questions', icon: <Calendar size={16} /> },
+                { label: 'Inbox', path: '/dashboard/inbox', icon: <Bell size={16} /> },
               ].map((item, i) => (
                 <button
                   key={i}
                   onClick={() => router.push(item.path)}
-                  className="w-full flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group"
+                  className="w-full flex items-center justify-between p-3 rounded-md transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group"
                 >
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg bg-${item.color}-50 dark:bg-${item.color}-900/20 text-${item.color}-600`}>
+                    <span className="p-2 rounded-md bg-muted text-muted-foreground transition-colors group-hover:text-primary">
                       {item.icon}
-                    </div>
-                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300 group-hover:text-blue-600 transition-colors">{item.label}</span>
+                    </span>
+                    <span className="text-sm font-medium text-foreground">{item.label}</span>
                   </div>
-                  <ChevronRight size={14} className="text-slate-400 group-hover:text-blue-600 transition-colors" />
+                  <ChevronRight size={16} className="text-muted-foreground transition-colors group-hover:text-primary" />
                 </button>
               ))}
             </CardContent>
           </Card>
 
-          {/* AI Support Card */}
-          <Card className="bg-slate-900 dark:bg-blue-950 text-white overflow-hidden relative">
-            <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-              <LayoutDashboard size={120} />
-            </div>
-            <CardContent className="p-8 space-y-6 relative z-10">
-              <h3 className="text-xl font-bold leading-tight">Academic AI Assistant</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">Get instant help with your studies, assignments, and academic questions powered by AI.</p>
-              <Button className="w-full bg-white text-slate-950 hover:bg-slate-200 font-bold h-12" onClick={() => router.push('/dashboard/ai')}>
-                Launch AI Assistant
+          {/* Academic AI assistant */}
+          <Card className="bg-primary text-primary-foreground border border-border shadow-sm">
+            <CardContent className="p-6 space-y-4">
+              <span className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-primary-foreground/15">
+                <Sparkles size={20} />
+              </span>
+              <div className="space-y-1.5">
+                <h3 className="text-lg font-semibold leading-tight">Academic AI assistant</h3>
+                <p className="text-sm leading-relaxed text-primary-foreground/80 text-pretty">
+                  Get help with your studies, assignments, and academic questions.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                className="w-full active:translate-y-px"
+                onClick={() => router.push('/dashboard/ai')}
+              >
+                Open assistant
               </Button>
             </CardContent>
           </Card>
-        </div>
+        </aside>
       </div>
-
-      <style jsx global>{`
-        @keyframes wave-hand {
-          0% { transform: rotate(0deg); }
-          10% { transform: rotate(14deg); }
-          20% { transform: rotate(-8deg); }
-          30% { transform: rotate(14deg); }
-          40% { transform: rotate(-4deg); }
-          50% { transform: rotate(10deg); }
-          60% { transform: rotate(0deg); }
-          100% { transform: rotate(0deg); }
-        }
-      `}</style>
     </div>
   );
 }
 
 function SectionHeader({ title, icon, onViewAll }) {
   return (
-    <div className="flex items-center justify-between mb-6">
-      <h3 className="text-xl font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+    <div className="flex items-center justify-between mb-5">
+      <h3 className="text-lg font-semibold flex items-center gap-2 text-foreground">
         {icon} {title}
       </h3>
-      <Button variant="ghost" className="text-blue-600 font-bold" onClick={onViewAll}>View All <ChevronRight size={16} /></Button>
+      <Button variant="ghost" size="sm" onClick={onViewAll}>View all <ChevronRight size={16} /></Button>
     </div>
   );
 }

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mountain Top University LMS — Build &amp; Status Report</title>
+<style>
+  :root{
+    --green:#1f6b46; --green-dark:#165134; --navy:#1d2b46; --ink:#1b2330;
+    --muted:#5b6776; --line:#e2e7ec; --bg:#ffffff; --soft:#f4f7f5; --gold:#b07d1f;
+    --red:#b3402f;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:"Source Sans 3","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink); line-height:1.5; font-size:13.5px; background:#eef1f3;
+  }
+  .page{
+    max-width:820px; margin:24px auto; background:var(--bg);
+    padding:0 0 40px; box-shadow:0 4px 24px rgba(20,40,30,.12); border-radius:6px; overflow:hidden;
+  }
+  header.cover{
+    background:linear-gradient(135deg,var(--green-dark),var(--green));
+    color:#fff; padding:40px 44px 34px;
+  }
+  header.cover .crest{font-size:11px;letter-spacing:.22em;text-transform:uppercase;opacity:.85;font-weight:700;}
+  header.cover h1{font-family:Georgia,"Times New Roman",serif;font-size:30px;margin:10px 0 6px;font-weight:600;letter-spacing:-.01em;}
+  header.cover p{margin:0;opacity:.92;font-size:14px;max-width:560px;}
+  header.cover .meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px;}
+  .chip{display:inline-block;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.25);
+    padding:4px 11px;border-radius:999px;font-size:11.5px;font-weight:600;}
+  .chip.ok{background:rgba(255,255,255,.92);color:var(--green-dark);border-color:transparent;}
+  main{padding:30px 44px 0;}
+  h2{font-family:Georgia,serif;font-size:19px;color:var(--navy);margin:30px 0 4px;font-weight:600;
+     border-bottom:2px solid var(--line);padding-bottom:7px;}
+  h2 .num{color:var(--green);font-weight:700;}
+  h3{font-size:14px;margin:16px 0 4px;color:var(--green-dark);font-weight:700;}
+  p.lead{color:var(--muted);margin:4px 0 10px;}
+  ul{margin:6px 0 12px;padding-left:18px;}
+  li{margin:3px 0;}
+  li b{color:var(--ink);}
+  .tbl{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:12.5px;}
+  .tbl th{background:var(--soft);text-align:left;padding:8px 10px;color:var(--navy);border:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.04em;}
+  .tbl td{padding:8px 10px;border:1px solid var(--line);vertical-align:top;}
+  .tbl td code{font-size:11px;background:var(--soft);padding:1px 5px;border-radius:4px;color:var(--green-dark);}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;}
+  .pill.done{background:#e4f0e9;color:var(--green-dark);}
+  .pill.partial{background:#fbf1dd;color:var(--gold);}
+  .pill.no{background:#fae4e0;color:var(--red);}
+  .note{background:var(--soft);border-left:3px solid var(--green);padding:11px 14px;border-radius:0 6px 6px 0;margin:12px 0;color:#2a3a31;font-size:12.5px;}
+  .warn{background:#fdf6ec;border-left:3px solid var(--gold);}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;}
+  .host{border:1px solid var(--line);border-radius:7px;padding:12px 14px;}
+  .host h4{margin:0 0 3px;font-size:13.5px;color:var(--navy);}
+  .host .tag{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
+  .host .rec{color:var(--green);} .host .alt{color:var(--muted);}
+  .host p{margin:4px 0 0;font-size:12px;color:var(--muted);}
+  footer{margin:34px 44px 0;padding-top:14px;border-top:1px solid var(--line);color:var(--muted);font-size:11px;display:flex;justify-content:space-between;}
+  code.k{background:#1d2b46;color:#dfe7ef;padding:2px 7px;border-radius:4px;font-size:11px;}
+  .avoid{page-break-inside:avoid;}
+  @media print{
+    body{background:#fff;font-size:11.5px;}
+    .page{box-shadow:none;margin:0;max-width:none;border-radius:0;}
+    header.cover{padding:30px 36px 26px;}
+    main{padding:18px 36px 0;}
+    h2{page-break-after:avoid;}
+    .no-print{display:none;}
+    @page{margin:14mm;}
+  }
+  .no-print{background:#1d2b46;color:#fff;text-align:center;padding:10px;font-size:12.5px;}
+  .no-print b{color:#9ad9b6;}
+</style>
+</head>
+<body>
+<div class="no-print">📄 To save as PDF: press <b>Ctrl + P</b> (or Cmd + P) → Destination <b>“Save as PDF”</b> → Save. This banner won’t appear in the PDF.</div>
+<div class="page">
+
+  <header class="cover">
+    <div class="crest">Mountain Top University · Empowered to Excel</div>
+    <h1>Learning Management Portal — Build &amp; Status Report</h1>
+    <p>A complete record of what was redesigned, fixed, and built; what requires a backend server; and where to deploy the project for free.</p>
+    <div class="meta">
+      <span class="chip ok">Build: passing (38 routes)</span>
+      <span class="chip">Branch: feat/mtu-redesign-and-logic-fixes</span>
+      <span class="chip">Stack: Next.js 16 · React · Zustand · Tailwind</span>
+      <span class="chip">Architecture: client-only (localStorage)</span>
+    </div>
+  </header>
+
+  <main>
+
+    <h2>Executive summary</h2>
+    <p class="lead">The portal was taken from a rough AI-generated draft to a coherent, institution-grade product: a full visual redesign, a 70-point logic audit with fixes, a proper academic-calendar engine, and four new feature modules — all committed and building green. Because the app is intentionally client-only (no backend/database; data persists in the browser’s localStorage), some specifications can only be simulated until a server is added; those are listed honestly in their own section.</p>
+
+    <h2>Foundation work <span class="num">(before the feature phases)</span></h2>
+    <ul>
+      <li><b>Full UI redesign</b> to a Modern Institutional standard in MTU’s real colours (forest green + navy), with proper typography and AI-slop purged (emoji, gradients, glassmorphism, glow effects) across ~40 files.</li>
+      <li><b>70-finding logic audit, fixed:</b> suspended-login gate, seed-data ID mismatches, per-recipient message scoping, dead/looping routes, duplicate live-class participants, admin self-lockout guard, and more.</li>
+      <li><b>Enrollment coherence:</b> one single source of truth for “a student’s courses,” used consistently everywhere.</li>
+      <li><b>Academic-calendar engine:</b> open/close <b>semester registration lock</b>, level-gated + semester-gated course registration, and promotion fully decoupled from sessions (per-student level editor + a deliberate bulk-promote tool).</li>
+      <li><b>Other:</b> dynamic Live-class page, working Mistral AI chatbot/advisor, sliding login image carousel, dropdown &amp; chatbot fixes.</li>
+    </ul>
+
+    <h2>The four feature phases</h2>
+    <table class="tbl avoid">
+      <tr><th style="width:60px">Phase</th><th>Module</th><th style="width:90px">Status</th><th style="width:78px">Commit</th></tr>
+      <tr><td><b>1</b></td><td>Notifications &amp; Notepad</td><td><span class="pill done">Shipped</span></td><td><code>5e6a7bd</code></td></tr>
+      <tr><td><b>2</b></td><td>Quiz module</td><td><span class="pill done">Shipped</span></td><td><code>c645359</code></td></tr>
+      <tr><td><b>3</b></td><td>Library &amp; Past Questions</td><td><span class="pill done">Shipped</span></td><td><code>a67f48a</code></td></tr>
+      <tr><td><b>4</b></td><td>Assignments · Email · Video</td><td><span class="pill done">Shipped</span></td><td><code>0c8a0b5</code></td></tr>
+    </table>
+
+    <h3>Phase 1 — Notification system + In-portal Notepad</h3>
+    <ul>
+      <li><b>Notification bell</b> (student, lecturer, admin): unread badge, dropdown with type icons + relative times, click-through links, mark-all-read, clear; full <b>history page</b>; per-type <b>preferences</b> in settings.</li>
+      <li><b>Per-user notifications:</b> targeted by recipient/role/type via a single <code>pushNotification()</code> helper that every other module uses.</li>
+      <li><b>Floating notepad:</b> multiple notes, <b>auto-save</b> while typing, search, pin, course tagging, word count, print/export — private per user, persists across sessions.</li>
+    </ul>
+
+    <h3>Phase 2 — Full Quiz module</h3>
+    <ul>
+      <li><b>Lecturer builder:</b> MCQ / True-False / Short-answer questions with marks, shuffle questions &amp; options, one-at-a-time or all-at-once display, time limit, attempts, draft/publish; edit locks to deadline-only once a student has started.</li>
+      <li><b>Student take-flow:</b> status tags (Upcoming/Active/Closed), always-visible countdown with <b>auto-submit</b>, flag-for-review, <b>30-second autosave</b>, <b>tab-switch anti-cheat</b> (3 switches = auto-submit + lecturer alerted), copy-blocking, instant MCQ/TF score, full result breakdown.</li>
+      <li><b>Grading &amp; dashboards:</b> auto-grade MCQ/TF, manual short-answer grading (student notified), submissions dashboard (scores, time taken, flags), CSV + print export; <b>admin</b> oversight with system analytics.</li>
+    </ul>
+
+    <h3>Phase 3 — Digital Library + Past Questions</h3>
+    <ul>
+      <li><b>Library:</b> lecturers upload materials (link or small file) tagged by week/topic and type, with visible/hidden control; students browse their registered courses’ materials, preview/download, search, and see a “New” badge; admin storage oversight.</li>
+      <li><b>Past Questions:</b> archive by year / semester / exam type, <b>cross-department</b> browsing, optional answer-scheme with visibility control; admin bulk management.</li>
+    </ul>
+
+    <h3>Phase 4 — Assignments + Email + Video</h3>
+    <ul>
+      <li><b>Assignments:</b> lecturer builder (formats, reference doc, rubric, per-student extensions), <b>hard deadline-lock</b>, resubmission-replaces-previous, grading + feedback, submissions dashboard + CSV/print report; student submit flow with PDF/DOCX + size validation and live countdown.</li>
+      <li><b>Email notifications:</b> styled HTML <b>welcome</b> and <b>login-alert</b> emails, the login alert including <b>IP geolocation</b> (city/state/country), device/browser, and time, plus a “Secure my account” action; fired automatically on signup/login.</li>
+      <li><b>Real video classes:</b> classrooms now embed <b>Jitsi Meet</b> (genuine camera/mic/screen-share, free, no API key) with <b>attendance tracking</b> (join/leave, present/late) and a hard end-time lock; lecturer scheduling + attendance report.</li>
+    </ul>
+
+    <h2>What needs a real server <span class="num">(current honest limitations)</span></h2>
+    <p class="lead">The app deliberately has no backend — it runs entirely in the browser with localStorage as its “database.” These items are stubbed, simulated, or capped until a server + database is added:</p>
+    <table class="tbl avoid">
+      <tr><th>Capability</th><th style="width:120px">Now</th><th>Why it needs a server</th></tr>
+      <tr><td><b>Email delivery to real inboxes</b></td><td><span class="pill partial">Preview only</span></td><td>Emails are fully built and viewable via Ethereal preview links; delivering to real addresses needs valid SMTP credentials (Gmail/SendGrid/Mailgun) in environment variables.</td></tr>
+      <tr><td><b>File uploads &gt; ~1&nbsp;MB</b></td><td><span class="pill no">Capped</span></td><td>localStorage holds only ~5&nbsp;MB total; real files need object storage (S3, Cloudinary, Supabase Storage).</td></tr>
+      <tr><td><b>Shared / multi-user data</b></td><td><span class="pill no">Per-browser</span></td><td>Data lives in each browser. A lecturer seeing a student’s submission only works in the same browser. A real database makes it shared across users/devices.</td></tr>
+      <tr><td><b>Real-time updates &amp; offline queue</b></td><td><span class="pill no">Local</span></td><td>True live sync between users needs WebSockets / a service (Pusher, Supabase Realtime).</td></tr>
+      <tr><td><b>Mobile push notifications</b></td><td><span class="pill no">Not built</span></td><td>Requires a mobile app / service worker + a push service (FCM).</td></tr>
+      <tr><td><b>Tamper-proof quizzes &amp; secure grading</b></td><td><span class="pill no">Client-side</span></td><td>Answer keys are in the browser; trustworthy grading must run on a server the student can’t inspect.</td></tr>
+      <tr><td><b>IP geolocation accuracy</b></td><td><span class="pill partial">Deploy-only</span></td><td>On localhost the IP is loopback (“Location unavailable”); it resolves real cities once hosted on a public server.</td></tr>
+    </table>
+    <div class="note">Good news: because the app is client-only, it <b>deploys and runs as-is for free</b> with no database to set up — perfect for a demo. Adding a backend later is an upgrade path, not a prerequisite.</div>
+
+    <h2>Deploying for free <span class="num">(hosting options)</span></h2>
+    <p class="lead">This is a Next.js app with server API routes (for email), so it needs a <b>Node.js host</b> — not a static-only host. Set two environment variables on whichever you pick: <code class="k">MISTRAL_API_KEY</code> (AI chatbot) and your SMTP creds (e.g. <code class="k">EMAIL_USER</code>/<code class="k">EMAIL_PASS</code>) if you want real email.</p>
+    <div class="grid2">
+      <div class="host avoid"><span class="tag rec">★ Recommended</span><h4>Vercel</h4><p>Built by the makers of Next.js — zero-config, generous free tier, API routes &amp; AI route work out of the box. Connect the GitHub repo, set env vars, deploy. Best fit by far.</p></div>
+      <div class="host avoid"><span class="tag alt">You mentioned this</span><h4>Render</h4><p>Free “Web Service” (Node). Build: <code>npm install &amp;&amp; npm run build</code>, Start: <code>npm start</code>. Works well; the free tier sleeps after ~15&nbsp;min idle (a few-second cold start on first hit).</p></div>
+      <div class="host avoid"><span class="tag alt">Alternative</span><h4>Netlify</h4><p>Free tier with Next.js support via its adapter. Connect repo, set env vars. Solid for front-end-heavy apps.</p></div>
+      <div class="host avoid"><span class="tag alt">Alternative</span><h4>Railway</h4><p>Very simple Node deploys, GitHub integration, small free usage allowance. Good for quick demos.</p></div>
+      <div class="host avoid"><span class="tag alt">Alternative</span><h4>Koyeb / Fly.io</h4><p>Free Node hosting tiers with global edge. A little more setup, but capable and free for light usage.</p></div>
+      <div class="host avoid"><span class="tag alt">If you add a backend</span><h4>Supabase / Firebase</h4><p>Free hosted Postgres/Mongo-style database + auth + file storage + realtime — the easiest way to lift the “needs a server” limitations later.</p></div>
+    </div>
+    <div class="note warn"><b>Fastest path:</b> push to GitHub (already done) → import the repo on <b>Vercel</b> → add the two env vars → Deploy. You’ll have a public link in a couple of minutes, and the per-browser localStorage model means it just works with no database.</div>
+
+    <h2>If you later go production-grade</h2>
+    <ul>
+      <li><b>Database:</b> Supabase / Postgres (or MongoDB) to make data shared and permanent.</li>
+      <li><b>File storage:</b> Cloudinary / S3 / Supabase Storage for real material, past-question and assignment uploads.</li>
+      <li><b>Server-side quiz grading &amp; auth:</b> move the answer key and grading behind the API; add hashed passwords + sessions.</li>
+      <li><b>Real email &amp; realtime:</b> SendGrid/Mailgun for delivery; Pusher/Supabase Realtime for live notifications.</li>
+    </ul>
+
+  </main>
+
+  <footer>
+    <span>Mountain Top University — LMS Portal · Build &amp; Status Report</span>
+    <span>Status: all phases shipped · build passing</span>
+  </footer>
+</div>
+</body>
+</html>
