@@ -107,6 +107,20 @@ export const useStore = create(
         toggleLecturerPortal: () =>
           set((state) => ({ lecturerPortalActive: !state.lecturerPortalActive })),
 
+        // ─── CLASS ARCHIVES GATE ───
+        // Off by default; admin flips it live when archives are ready.
+        classArchivesActive: false,
+        toggleClassArchives: () =>
+          set((state) => ({ classArchivesActive: !state.classArchivesActive })),
+
+        // ─── INSTITUTION ACCESS PINS ───
+        // Used by student / lecturer signup pages for gating.
+        // Admin can update these from the Governance tab at any time.
+        studentAccessPin: 'STU2026',
+        lecturerAccessPin: 'STAFF2026',
+        updateAccessPins: (studentPin, lecturerPin) =>
+          set({ studentAccessPin: studentPin, lecturerAccessPin: lecturerPin }),
+
         // ─── LECTURER COURSE REGISTRATION ───
         // Window set by admin; registrations keyed by lecturerId;
         // overrides allow individual re-opens after deadline.
@@ -126,8 +140,8 @@ export const useStore = create(
           const allUsers = get().getAllUsers();
           const foundUser = allUsers.find(u => u.email === email && u.password === password);
           if (foundUser) {
-            if (foundUser.status && foundUser.status !== 'active') {
-              return { success: false, error: 'Your account is currently dormant/suspended. Please contact IT admin.' };
+            if (foundUser.status && foundUser.status === 'suspended') {
+              return { success: false, error: 'Your account has been suspended. Contact the admin for assistance.' };
             }
             
             // --- SECURITY ALERT DISPATCH ---
@@ -1751,6 +1765,7 @@ export const useStore = create(
             id: nextId(),
             courseCode: data.courseCode ?? '',
             courseTitle: data.courseTitle ?? '',
+            level: data.level ?? '',
             year: data.year ?? '',
             semester: data.semester === '2nd' ? '2nd' : '1st',
             examType: data.examType === 'mid' ? 'mid' : 'final',
@@ -1767,6 +1782,8 @@ export const useStore = create(
             uploaderName: data.uploaderName ?? uploader?.name ?? null,
             uploaderRole: data.uploaderRole ?? uploader?.role ?? null,
             visible: data.visible ?? true,
+            // Admin can mark a question visible to all levels regardless of the course level
+            visibleToAll: data.visibleToAll ?? false,
             createdAt: nowISO,
             // harmless legacy aliases so any older list UI doesn't crash
             type: data.type ?? 'Theory',
@@ -2148,18 +2165,36 @@ export const useStore = create(
           return { success: true };
         },
 
-        toggleUserStatus: (userId) => {
+        suspendUser: (userId, reason = '') => {
           set((state) => {
             const isDynamic = state.dynamicUsers.some(u => u.id === userId);
             if (isDynamic) {
               return {
-                dynamicUsers: state.dynamicUsers.map(u => 
-                  u.id === userId ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u
+                dynamicUsers: state.dynamicUsers.map(u =>
+                  u.id === userId ? { ...u, status: 'suspended', suspensionReason: reason } : u
                 )
               };
             } else {
               const mockUser = MOCK_DB.users.find(u => u.id === userId);
-              const updatedUser = { ...mockUser, status: mockUser.status === 'active' ? 'inactive' : 'active' };
+              const updatedUser = { ...mockUser, status: 'suspended', suspensionReason: reason };
+              const freshDynamic = state.dynamicUsers.filter(u => u.id !== userId);
+              return { dynamicUsers: [...freshDynamic, updatedUser] };
+            }
+          });
+        },
+
+        activateUser: (userId) => {
+          set((state) => {
+            const isDynamic = state.dynamicUsers.some(u => u.id === userId);
+            if (isDynamic) {
+              return {
+                dynamicUsers: state.dynamicUsers.map(u =>
+                  u.id === userId ? { ...u, status: 'active', suspensionReason: '' } : u
+                )
+              };
+            } else {
+              const mockUser = MOCK_DB.users.find(u => u.id === userId);
+              const updatedUser = { ...mockUser, status: 'active', suspensionReason: '' };
               const freshDynamic = state.dynamicUsers.filter(u => u.id !== userId);
               return { dynamicUsers: [...freshDynamic, updatedUser] };
             }
@@ -2534,6 +2569,9 @@ export const useStore = create(
         lecturerCourseRegWindow: state.lecturerCourseRegWindow,
         lecturerCourseRegistrations: state.lecturerCourseRegistrations,
         lecturerRegOverrides: state.lecturerRegOverrides,
+        studentAccessPin: state.studentAccessPin,
+        lecturerAccessPin: state.lecturerAccessPin,
+        classArchivesActive: state.classArchivesActive,
       }),
       merge: (persisted, current) => {
         const p = persisted || {};

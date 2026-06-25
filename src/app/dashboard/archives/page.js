@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   Play, Calendar, Users, Search,
   Download, Share2, Film,
-  ShieldCheck
+  ShieldCheck, Lock
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,13 +15,38 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export default function ClassArchivalSystem() {
   const router = useRouter();
-  const { user, courses } = useStore();
+  const { user, classArchivesActive } = useStore();
+
+  // ── Dormant gate ────────────────────────────────────────────────────────────
+  if (!classArchivesActive) {
+    return (
+      <main className="flex flex-col items-center justify-center min-h-[60vh] gap-5 text-center px-6 animate-fade-in">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-muted text-muted-foreground">
+          <Lock size={28} strokeWidth={1.5} />
+        </div>
+        <div className="space-y-2 max-w-sm">
+          <h1 className="font-serif text-2xl font-semibold text-foreground">Class Archives coming soon</h1>
+          <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
+            This feature is not yet available. The administration will announce when recorded lecture archives go live.
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => router.push('/dashboard')}>
+          Return to dashboard
+        </Button>
+      </main>
+    );
+  }
+
+  // ── Active archives view ─────────────────────────────────────────────────────
+  // Only show recordings that match the student's own level
+  const studentLevel = user?.level;
 
   const mockRecordings = [
     {
       id: "REC-001",
       title: "Advanced Quantum Mechanics - Week 4",
       courseCode: "PHY401",
+      level: "400L",
       lecturer: "Prof. James Anderson",
       date: "2024-04-15",
       duration: "1h 45m",
@@ -33,6 +58,7 @@ export default function ClassArchivalSystem() {
       id: "REC-002",
       title: "Introduction to Neural Networks",
       courseCode: "CSC302",
+      level: "300L",
       lecturer: "Dr. Sarah Omotayo",
       date: "2024-04-12",
       duration: "52m",
@@ -44,6 +70,7 @@ export default function ClassArchivalSystem() {
       id: "REC-003",
       title: "Fullstack Engineering: State Management",
       courseCode: "ICT204",
+      level: "200L",
       lecturer: "Engr. Victor Adeleke",
       date: "2024-04-10",
       duration: "2h 10m",
@@ -52,6 +79,11 @@ export default function ClassArchivalSystem() {
       views: 256
     }
   ];
+
+  // Restrict to student's current level
+  const visibleRecordings = user?.role === 'student'
+    ? mockRecordings.filter(r => r.level === studentLevel)
+    : mockRecordings;
 
   return (
     <main className="space-y-8 animate-fade-in">
@@ -66,7 +98,8 @@ export default function ClassArchivalSystem() {
             </h1>
           </div>
           <p className="max-w-prose text-sm leading-relaxed text-pretty text-muted-foreground">
-            Watch back recorded lectures and virtual classroom sessions for your courses.
+            Watch back recorded lectures and virtual classroom sessions
+            {studentLevel ? ` for ${studentLevel} courses` : ''}.
           </p>
         </div>
 
@@ -77,11 +110,11 @@ export default function ClassArchivalSystem() {
       </header>
 
       <section aria-label="Recorded sessions">
-        {mockRecordings.length === 0 ? (
-          <EmptyState onBrowse={() => router.push('/dashboard/courses')} />
+        {visibleRecordings.length === 0 ? (
+          <EmptyState onBrowse={() => router.push('/dashboard/courses')} studentLevel={studentLevel} />
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {mockRecordings.map((rec) => (
+            {visibleRecordings.map((rec) => (
               <Card
                 key={rec.id}
                 className="group overflow-hidden border-border transition-colors hover:border-primary/40"
@@ -175,12 +208,14 @@ function RecordingActions({ recording }) {
   );
 }
 
-function EmptyState({ onBrowse }) {
+function EmptyState({ onBrowse, studentLevel }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-border bg-card px-6 py-16 text-center">
       <Film size={32} strokeWidth={1.5} className="text-muted-foreground" />
       <p className="mt-4 max-w-prose text-sm text-pretty text-muted-foreground">
-        No recordings are available yet. They appear here after your live classes end.
+        {studentLevel
+          ? `No recordings are available for ${studentLevel} yet. They appear here after your live classes end.`
+          : 'No recordings are available yet. They appear here after your live classes end.'}
       </p>
       <Button className="mt-6" onClick={onBrowse}>
         Browse courses

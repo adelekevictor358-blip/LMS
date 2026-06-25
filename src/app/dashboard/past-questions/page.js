@@ -23,19 +23,32 @@ export default function PastQuestions() {
   const getPastQuestions = useStore((s) => s.getPastQuestions);
   // Subscribe to the array itself so the view re-renders on visibility changes.
   const pastQuestions = useStore((s) => s.pastQuestions);
+  const user = useStore((s) => s.user);
 
   const [search, setSearch] = useState('');
   const [filterCourse, setFilterCourse] = useState('all');
   const [filterYear, setFilterYear] = useState('all');
   const [filterSemester, setFilterSemester] = useState('all');
   const [filterExam, setFilterExam] = useState('all');
+  const [filterLevel, setFilterLevel] = useState('all');
 
   // Cross-department: all visible records, newest-first. We read `pastQuestions`
   // so the memo recomputes whenever a record is added or its visibility flips.
   const all = useMemo(() => {
     void pastQuestions;
-    return getPastQuestions();
-  }, [getPastQuestions, pastQuestions]);
+    const raw = getPastQuestions();
+    
+    // Students can only see past questions up to their current level, unless visibleToAll
+    if (user?.role === 'student') {
+      const userLevelInt = parseInt(user.level || '100L', 10) || 100;
+      return raw.filter((pq) => {
+        if (pq.visibleToAll) return true;
+        const pqLevelInt = parseInt(pq.level || '100L', 10) || 100;
+        return pqLevelInt <= userLevelInt;
+      });
+    }
+    return raw;
+  }, [getPastQuestions, pastQuestions, user]);
 
   // Distinct option lists derived from the live archive.
   const courseOptions = useMemo(() => {
@@ -58,20 +71,22 @@ export default function PastQuestions() {
       if (filterYear !== 'all' && p.year !== filterYear) return false;
       if (filterSemester !== 'all' && p.semester !== filterSemester) return false;
       if (filterExam !== 'all' && p.examType !== filterExam) return false;
+      if (filterLevel !== 'all' && p.level !== filterLevel) return false;
       if (q) {
         const hay = `${p.courseCode || ''} ${p.courseTitle || ''}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [all, search, filterCourse, filterYear, filterSemester, filterExam]);
+  }, [all, search, filterCourse, filterYear, filterSemester, filterExam, filterLevel]);
 
   const hasActiveFilters =
     search.trim() !== '' ||
     filterCourse !== 'all' ||
     filterYear !== 'all' ||
     filterSemester !== 'all' ||
-    filterExam !== 'all';
+    filterExam !== 'all' ||
+    filterLevel !== 'all';
 
   const clearFilters = () => {
     setSearch('');
@@ -79,6 +94,7 @@ export default function PastQuestions() {
     setFilterYear('all');
     setFilterSemester('all');
     setFilterExam('all');
+    setFilterLevel('all');
   };
 
   // Group by year (desc) then by semester (1st before 2nd) for an archive feel.
@@ -133,7 +149,7 @@ export default function PastQuestions() {
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <label className="flex flex-col gap-1.5">
             <span className="text-xs font-medium text-muted-foreground">Course</span>
             <Select value={filterCourse} onValueChange={setFilterCourse}>
@@ -144,6 +160,19 @@ export default function PastQuestions() {
                     {code}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </label>
+
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium text-muted-foreground">Level</span>
+            <Select value={filterLevel} onValueChange={setFilterLevel}>
+              <SelectContent>
+                <SelectItem value="all">All levels</SelectItem>
+                <SelectItem value="100L">100 Level</SelectItem>
+                <SelectItem value="200L">200 Level</SelectItem>
+                <SelectItem value="300L">300 Level</SelectItem>
+                <SelectItem value="400L">400 Level</SelectItem>
               </SelectContent>
             </Select>
           </label>

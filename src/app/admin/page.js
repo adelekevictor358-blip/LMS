@@ -49,6 +49,11 @@ export default function AdminDashboard() {
   const advanceSemester = useStore(state => state.advanceSemester);
   const beginNewSession = useStore(state => state.beginNewSession);
   const promoteStudents = useStore(state => state.promoteStudents);
+  const studentAccessPin = useStore(state => state.studentAccessPin);
+  const lecturerAccessPin = useStore(state => state.lecturerAccessPin);
+  const updateAccessPins = useStore(state => state.updateAccessPins);
+  const suspendUser = useStore(state => state.suspendUser);
+  const activateUser = useStore(state => state.activateUser);
 
   const hasHydrated = useStore(state => state._hasHydrated);
   const dynamicUsers = useStore(state => state.dynamicUsers);
@@ -139,6 +144,18 @@ export default function AdminDashboard() {
   const [lcrSession, setLcrSession] = useState(currentSession || '2025/2026');
   const [viewRegLecturer, setViewRegLecturer] = useState(null);
   const [lcrSearchQuery, setLcrSearchQuery] = useState('');
+
+  // Access PINs
+  const [isPinDialogOpen, setIsPinDialogOpen] = useState(false);
+  const [editStuPin, setEditStuPin] = useState('');
+  const [editLecPin, setEditLecPin] = useState('');
+
+  useEffect(() => {
+    if (isPinDialogOpen) {
+      setEditStuPin(studentAccessPin);
+      setEditLecPin(lecturerAccessPin);
+    }
+  }, [isPinDialogOpen, studentAccessPin, lecturerAccessPin]);
 
   // Unified Hydration & Auth Check
   if (!mounted || !hasHydrated) {
@@ -635,6 +652,18 @@ export default function AdminDashboard() {
                                   )}
 
                                   {u.role !== 'admin' && (
+                                     <Button variant="ghost" size="icon" onClick={() => { 
+                                       if(u.status === 'suspended') {
+                                         if(confirm(`Activate ${u.name}?`)) activateUser(u.id);
+                                       } else {
+                                         const reason = prompt(`Reason for suspending ${u.name}?`);
+                                         if(reason !== null) suspendUser(u.id, reason);
+                                       }
+                                     }} title={u.status === 'suspended' ? "Activate user" : "Suspend user"} className={`h-8 w-8 ${u.status === 'suspended' ? 'text-success hover:text-success hover:bg-success/10' : 'text-muted-foreground hover:text-warning hover:bg-warning/10'}`}>
+                                        {u.status === 'suspended' ? <CheckCircle size={16} /> : <EyeOff size={16} />}
+                                     </Button>
+                                  )}
+                                  {u.role !== 'admin' && (
                                      <Button variant="ghost" size="icon" onClick={() => resetToDefaultPassword(u.id)} title="Reset to default password" className="h-8 w-8 text-muted-foreground hover:text-warning">
                                         <RotateCcw size={16} />
                                      </Button>
@@ -920,26 +949,68 @@ export default function AdminDashboard() {
                    <CardContent className="p-0">
                       <div className="divide-y divide-border">
                          <div className="p-5 flex items-center justify-between gap-4 transition-colors hover:bg-muted/40">
-                            <div className="flex items-center gap-4">
-                               <div className="h-11 w-11 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
-                                  <Construction size={20} strokeWidth={1.5} />
-                               </div>
-                               <div>
-                                  <p className="text-sm font-semibold text-foreground">Lecturer management portal</p>
-                                  <p className="text-xs text-muted-foreground pr-4">Global access control for faculty modules.</p>
-                               </div>
-                            </div>
-                            <button
-                               type="button"
-                               role="switch"
-                               aria-checked={lecturerPortalActive}
-                               aria-label="Toggle lecturer management portal"
-                               className={`w-11 h-6 rounded-full p-0.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${lecturerPortalActive ? 'bg-primary' : 'bg-muted'}`}
-                               onClick={toggleLecturerPortal}
-                            >
-                               <div className={`h-5 w-5 rounded-full bg-card shadow-sm transition-transform ${lecturerPortalActive ? 'translate-x-5' : 'translate-x-0'}`} />
-                            </button>
-                         </div>
+                             <div className="flex items-center gap-4">
+                                <div className="h-11 w-11 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                                   <Lock size={20} strokeWidth={1.5} />
+                                </div>
+                                <div>
+                                   <p className="text-sm font-semibold text-foreground">Institution Access PINs</p>
+                                   <p className="text-xs text-muted-foreground pr-4">Required for new student and lecturer registrations.</p>
+                                </div>
+                             </div>
+                             <Dialog open={isPinDialogOpen} onOpenChange={setIsPinDialogOpen}>
+                                <DialogTrigger asChild>
+                                   <Button variant="outline" size="sm">Manage PINs</Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-[425px]">
+                                   <DialogHeader>
+                                      <DialogTitle>Update Access PINs</DialogTitle>
+                                      <DialogDescription>These PINs are required during sign up to verify legitimate users.</DialogDescription>
+                                   </DialogHeader>
+                                   <div className="grid gap-4 py-4">
+                                      <div className="grid gap-2">
+                                         <Label>Student Access PIN</Label>
+                                         <Input value={editStuPin} onChange={e => setEditStuPin(e.target.value)} placeholder="e.g. STU2026" />
+                                      </div>
+                                      <div className="grid gap-2">
+                                         <Label>Lecturer Access PIN</Label>
+                                         <Input value={editLecPin} onChange={e => setEditLecPin(e.target.value)} placeholder="e.g. STAFF2026" />
+                                      </div>
+                                   </div>
+                                   <DialogFooter>
+                                      <Button variant="outline" onClick={() => setIsPinDialogOpen(false)}>Cancel</Button>
+                                      <Button onClick={() => {
+                                         if (!editStuPin.trim() || !editLecPin.trim()) { alert('PINs cannot be empty'); return; }
+                                         updateAccessPins(editStuPin.trim(), editLecPin.trim());
+                                         setIsPinDialogOpen(false);
+                                         alert('Access PINs updated successfully.');
+                                      }}>Save changes</Button>
+                                   </DialogFooter>
+                                </DialogContent>
+                             </Dialog>
+                          </div>
+
+                          <div className="p-5 flex items-center justify-between gap-4 transition-colors hover:bg-muted/40">
+                             <div className="flex items-center gap-4">
+                                <div className="h-11 w-11 rounded-md bg-muted flex items-center justify-center text-muted-foreground">
+                                   <Construction size={20} strokeWidth={1.5} />
+                                </div>
+                                <div>
+                                   <p className="text-sm font-semibold text-foreground">Lecturer management portal</p>
+                                   <p className="text-xs text-muted-foreground pr-4">Global access control for faculty modules.</p>
+                                </div>
+                             </div>
+                             <button
+                                type="button"
+                                role="switch"
+                                aria-checked={lecturerPortalActive}
+                                aria-label="Toggle lecturer management portal"
+                                className={`w-11 h-6 rounded-full p-0.5 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${lecturerPortalActive ? 'bg-primary' : 'bg-muted'}`}
+                                onClick={toggleLecturerPortal}
+                             >
+                                <div className={`h-5 w-5 rounded-full bg-card shadow-sm transition-transform ${lecturerPortalActive ? 'translate-x-5' : 'translate-x-0'}`} />
+                             </button>
+                          </div>
 
                          <div className="p-5 flex items-center justify-between gap-4 opacity-60">
                             <div className="flex items-center gap-4">

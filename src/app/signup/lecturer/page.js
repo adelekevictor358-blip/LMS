@@ -14,6 +14,7 @@ export default function LecturerSignup() {
   const router = useRouter();
   const signup = useStore(state => state.signup);
   const structure = useStore(state => state.getAcademicStructure());
+  const lecturerAccessPin = useStore(state => state.lecturerAccessPin);
   const [loading, setLoading] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
   const [accessPIN, setAccessPIN] = useState('');
@@ -33,11 +34,11 @@ export default function LecturerSignup() {
 
   const checkPIN = (e) => {
     e.preventDefault();
-    if (accessPIN === 'STAFF2026') {
+    if (accessPIN === lecturerAccessPin) {
       setIsVerified(true);
       setPinError('');
     } else {
-      setPinError('Invalid access PIN. Please contact IT administration.');
+      setPinError('Invalid access PIN. Contact the admin for your registration PIN.');
     }
   };
 
